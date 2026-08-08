@@ -141,6 +141,15 @@ def run_sync():
             )
             log.info("wrote %s: %d rows", dest_table, len(df))
 
+        # Indexes must be (re)created here: if_exists="replace" drops the table
+        # each run, so any index made outside the sync would not survive.
+        # These back the API's filters: /api/cases (nature_of_suit), /api/case
+        # (caseid on both tables), and the ORDER BY on cif/caseid.
+        conn.execute(text("CREATE INDEX ix_cases_caseid   ON litigation_cases   (caseid)"))
+        conn.execute(text("CREATE INDEX ix_cases_suit_cif  ON litigation_cases   (nature_of_suit, cif, caseid)"))
+        conn.execute(text("CREATE INDEX ix_hist_caseid     ON litigation_history (caseid)"))
+        log.info("created indexes")
+
     log.info("sync finished in %.1fs", (datetime.now() - started).total_seconds())
 
 

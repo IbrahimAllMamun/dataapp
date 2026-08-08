@@ -1,68 +1,220 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import CaseDetails from "./CaseDetails.jsx";
+import { LABELS, formatCell } from "./format.js";
+
+// Tab label -> the exact `nature_of_suit` value stored in litigation_cases.
+const TABS = [
+  { key: "NI", suit: "Negotiable Instrument Act (NI Act)" },
+  { key: "ARA", suit: "Artha Rin Aine (ARA)" },
+  { key: "ARAE", suit: "Artha Rin Aine Execution (ARAE)" },
+];
+
+const PAGE_SIZES = [25, 50, 100, 200];
 
 export default function App() {
-  const [columns, setColumns] = useState([]);
-  const [rows, setRows] = useState([]);
+  const [tab, setTab] = useState(TABS[0]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  const [openCaseId, setOpenCaseId] = useState(null);
+
   useEffect(() => {
-    loadData();
+    const ctrl = new AbortController();
+    setLoading(true);
+    setError(null);
+
+    const qs = new URLSearchParams({
+      suit: tab.suit,
+      page: String(page),
+      page_size: String(pageSize),
+    });
+
+    fetch(`/api/cases?${qs}`, { signal: ctrl.signal })
+      .then(async (res) => {
+        const body = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(body?.detail || `Request failed (${res.status})`);
+        return body;
+      })
+      .then((body) => {
+        setData(body);
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (err.name === "AbortError") return; // superseded by a newer request
+        setError(err.message);
+        setData(null);
+        setLoading(false);
+      });
+
+    return () => ctrl.abort();
+  }, [tab, page, pageSize]);
+
+  const selectTab = useCallback((next) => {
+    setTab(next);
+    setPage(1); // page N of the old suit is meaningless for the new one
   }, []);
 
-  async function loadData() {
-    try {
-      setLoading(true);
-      const res = await fetch("/api/data");
-      if (!res.ok) {
-        const detail = await res.json().catch(() => ({}));
-        throw new Error(detail.detail || "Failed to load data");
-      }
-      const data = await res.json();
-      setColumns(data.columns);
-      setRows(data.rows);
-      setError(null);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const totalPages = data?.total_pages ?? 0;
+  const columns = data?.columns ?? [];
+  const rows = data?.rows ?? [];
 
   return (
     <div className="wrap">
       <header>
-        <h1>Litigation Data</h1>
-        <button onClick={loadData} disabled={loading}>
-          {loading ? "Loading…" : "Refresh"}
-        </button>
+        <div>
+          <h1>Litigation Cases</h1>
+          <p className="subtitle">{tab.suit}</p>
+        </div>
+        {data && (
+          <span className="total">{data.total.toLocaleString()} cases</span>
+        )}
       </header>
 
-      {error && <p className="error">Error: {error}</p>}
+      <nav className="tabs" role="tablist">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            role="tab"
+            aria-selected={t.key === tab.key}
+            className={`tab${t.key === tab.key ? " active" : ""}`}
+            onClick={() => selectTab(t)}
+          >
+            {t.key}
+          </button>
+        ))}
+      </nav>
 
-      {loading ? (
-        <p className="muted">Loading…</p>
-      ) : rows.length === 0 ? (
-        <p className="muted">No data returned.</p>
-      ) : (
-        <table>
-          <thead>
-            <tr>
-              {columns.map((col) => (
-                <th key={col}>{col}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, i) => (
-              <tr key={i}>
-                {columns.map((col) => (
-                  <td key={col}>{row[col] === null ? "—" : String(row[col])}</td>
+      {error && (
+        <div className="error">
+          <strong>Could not load cases.</strong> {error}
+        </div>
+      )}
+
+      {!error && (
+        <div className="panel">
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  {columns.map((c) => (
+                    <th key={c}>{LABELS[c] ?? c}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {loading && (
+                  <tr>
+                    <td className="muted center" colSpan={columns.length || 6}>
+                      Loading…
+                    </td>
+                  </tr>
+                )}
+
+                {!loading && rows.length === 0 && (
+                  <tr>
+                    <td className="muted center" colSpan={columns.length || 6}>
+                      No cases for this suit type.
+                    </td>
+                  </tr>
+                )}
+
+                {!loading &&
+                  rows.map((row) => (
+                    <tr
+                      key={row.caseid}
+                      className="row-click"
+                      tabIndex={0}
+                      onClick={() => setOpenCaseId(row.caseid)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setOpenCaseId(row.caseid);
+                        }
+                      }}
+                    >
+                      {columns.map((c) => (
+                        <td key={c}>
+                          {c === "litigationstatus" ? (
+                            <span
+                              className={`badge ${
+                                row[c] === "Active" ? "active" : "inactive"
+                              }`}
+                            >
+                              {formatCell(c, row[c])}
+                            </span>
+                          ) : (
+                            formatCell(c, row[c])
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="pager">
+            <label className="page-size">
+              Rows
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setPage(1); // offsets shift, so the old page number is stale
+                }}
+              >
+                {PAGE_SIZES.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
                 ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+              </select>
+            </label>
+
+            <div className="pager-nav">
+              <button
+                className="ghost"
+                disabled={loading || page <= 1}
+                onClick={() => setPage(1)}
+              >
+                « First
+              </button>
+              <button
+                className="ghost"
+                disabled={loading || page <= 1}
+                onClick={() => setPage((p) => p - 1)}
+              >
+                ‹ Prev
+              </button>
+              <span className="page-info">
+                Page {page.toLocaleString()} of{" "}
+                {(totalPages || 1).toLocaleString()}
+              </span>
+              <button
+                className="ghost"
+                disabled={loading || page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next ›
+              </button>
+              <button
+                className="ghost"
+                disabled={loading || page >= totalPages}
+                onClick={() => setPage(totalPages)}
+              >
+                Last »
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {openCaseId !== null && (
+        <CaseDetails caseId={openCaseId} onClose={() => setOpenCaseId(null)} />
       )}
     </div>
   );
