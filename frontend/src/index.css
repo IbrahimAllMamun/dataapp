@@ -218,3 +218,31 @@ button.ghost:not(:disabled):hover { background: #f0f2f5; }
 
 table.inner { border: 1px solid #eef0f3; border-radius: 8px; }
 table.inner th { background: #f7f8fa; position: static; }
+
+/* ---- filter panel ---- */
+.filters {
+  background: var(--panel, #fff);
+  border: 1px solid var(--line, #e3e6ea);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.filter-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; }
+.filter { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.filter > span, .filter legend { color: #5b6470; font-weight: 600; font-size: 12px; }
+.filter select, .filter input[type="search"] {
+  padding: 7px 10px; border: 1px solid var(--line, #e3e6ea);
+  border-radius: 7px; font: inherit; background: #fff; min-width: 190px;
+}
+.filter.grow { flex: 1; }
+.filter.grow input { width: 100%; min-width: 220px; }
+fieldset.checks {
+  border: 1px solid var(--line, #e3e6ea); border-radius: 8px;
+  padding: 8px 12px 10px; display: flex; gap: 14px; align-items: center;
+}
+fieldset.checks legend { padding: 0 6px; }
+.check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.filter.actions { flex-direction: row; align-items: center; gap: 12px; margin-left: auto; }

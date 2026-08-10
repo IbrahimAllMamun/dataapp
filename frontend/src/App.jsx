@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import CaseDetails from "./CaseDetails.jsx";
+import Filters from "./Filters.jsx";
 import { LABELS, formatCell } from "./format.js";
 
 // Tab label -> the exact `nature_of_suit` value stored in litigation_cases.
@@ -10,6 +11,17 @@ const TABS = [
 ];
 
 const PAGE_SIZES = [25, 50, 100, 200];
+
+// Mirrors DEFAULTS in the API. One routine produces both the opening view and
+// the "Clear all" view, so the two can never diverge.
+const DEFAULT_FILTERS = {
+  branch: "All",
+  upcoming: "All",
+  products: ["SME"],
+  statuses: ["Active"],
+  warrant: false,
+  q: "",
+};
 
 export default function App() {
   const [tab, setTab] = useState(TABS[0]);
@@ -22,6 +34,19 @@ export default function App() {
 
   const [openCaseId, setOpenCaseId] = useState(null);
 
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+
+  // The single reset routine — used for "Clear all" AND on suit change.
+  const clearFilters = useCallback(() => {
+    setFilters(DEFAULT_FILTERS);
+    setPage(1);
+  }, []);
+
+  const changeFilters = useCallback((next) => {
+    setFilters(next);
+    setPage(1); // any filter change invalidates the current page offset
+  }, []);
+
   useEffect(() => {
     const ctrl = new AbortController();
     setLoading(true);
@@ -32,6 +57,13 @@ export default function App() {
       page: String(page),
       page_size: String(pageSize),
     });
+    if (filters.branch && filters.branch !== "All") qs.set("branch", filters.branch);
+    if (filters.upcoming && filters.upcoming !== "All") qs.set("upcoming", filters.upcoming);
+    if (filters.warrant) qs.set("warrant", "true");
+    if (filters.q) qs.set("q", filters.q);
+    // Repeated keys -> FastAPI list params.
+    filters.products.forEach((p) => qs.append("products", p));
+    filters.statuses.forEach((s) => qs.append("statuses", s));
 
     fetch(`/api/cases?${qs}`, { signal: ctrl.signal })
       .then(async (res) => {
@@ -51,7 +83,7 @@ export default function App() {
       });
 
     return () => ctrl.abort();
-  }, [tab, page, pageSize]);
+  }, [tab, page, pageSize, filters]);
 
   const selectTab = useCallback((next) => {
     setTab(next);
@@ -87,6 +119,14 @@ export default function App() {
           </button>
         ))}
       </nav>
+
+      <Filters
+        suit={tab.suit}
+        value={filters}
+        onChange={changeFilters}
+        onClear={clearFilters}
+        total={data?.total}
+      />
 
       {error && (
         <div className="error">

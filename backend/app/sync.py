@@ -6,6 +6,7 @@ import pandas as pd
 from sqlalchemy import text
 
 from .database import engine_idlc, engine
+from .derive import derive_case_columns
 
 logging.basicConfig(
     level=logging.INFO,
@@ -128,6 +129,15 @@ def run_sync():
         frames[dest_table] = df
         log.info("read %s: %d rows", dest_table, len(df))
 
+    # 1b. Derive the dashboard columns (suit type, warrant flag, hearing
+    # buckets, month flags, status rank). Precomputed here so the API only
+    # filters. Buckets are relative to the sync run; the daily 06:00 job
+    # refreshes them.
+    frames["litigation_cases"] = derive_case_columns(
+        frames["litigation_cases"], frames["holidays"]
+    )
+    log.info("derived dashboard columns on litigation_cases")
+
     # 2. Load everything in a single transaction. Any failure rolls back all.
     with engine.begin() as conn:
         for dest_table, df in frames.items():
@@ -148,6 +158,11 @@ def run_sync():
         conn.execute(text("CREATE INDEX ix_cases_caseid   ON litigation_cases   (caseid)"))
         conn.execute(text("CREATE INDEX ix_cases_suit_cif  ON litigation_cases   (nature_of_suit, cif, caseid)"))
         conn.execute(text("CREATE INDEX ix_hist_caseid     ON litigation_history (caseid)"))
+        # Filter columns used by /api/cases.
+        conn.execute(text("CREATE INDEX ix_cases_branch    ON litigation_cases (branch)"))
+        conn.execute(text("CREATE INDEX ix_cases_upcoming  ON litigation_cases (upcoming)"))
+        conn.execute(text("CREATE INDEX ix_cases_status    ON litigation_cases (litigationstatus)"))
+        conn.execute(text("CREATE INDEX ix_cases_prodlabel ON litigation_cases (product_category_label)"))
         log.info("created indexes")
 
     log.info("sync finished in %.1fs", (datetime.now() - started).total_seconds())

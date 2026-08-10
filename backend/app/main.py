@@ -10,6 +10,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 from .database import engine
 from .sync import run_sync
+from .filters import build_filters, where_clause
 
 log = logging.getLogger("api")
 
@@ -49,15 +50,22 @@ app.add_middleware(
 )
 
 
+# Opening view == "Clear all" view. One definition, served to the client,
+# so the two can never drift apart (FILTERING_ALGORITHM.md §6).
+DEFAULTS = {
+    "branch": "All",
+    "upcoming": "All",
+    "products": ["SME"],
+    "statuses": ["Active"],
+    "warrant": False,
+    "q": "",
+}
+
+
 def _rows(result):
     """SQLAlchemy result -> (columns, list-of-dicts)."""
     return list(result.keys()), [dict(r._mapping) for r in result]
 
-
-"nature_of_suit","suit_value","suit_filing_date","law_firm",
-"court_no","plaintiff","plaintiffcif","next_hearing_date",
-"cheque_number","litigation_receivable","aging","present_case_status",
-"litigationstatus"
 
 # Columns pulled from litigation_cases, split into two logical views but fetched
 # in ONE query (same row, same WHERE) to avoid a second round-trip.
@@ -76,31 +84,74 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/api/filters")
+def get_filter_options(suit: str | None = None):
+    """Distinct values for the filter controls, scoped to the current suit."""
+    # Scope branch options to the selected suit so the dropdown only offers
+    # values that can actually match.
+    where, params = build_filters(suit=suit)
+    wc = where_clause(where + ["branch IS NOT NULL"])
+    try:
+        with engine.connect() as conn:
+            branches = [r[0] for r in conn.execute(
+                text(f"SELECT DISTINCT branch FROM litigation_cases {wc} ORDER BY branch"),
+                params,
+            )]
+            statuses = [r[0] for r in conn.execute(text(
+                "SELECT DISTINCT litigationstatus FROM litigation_cases "
+                "WHERE litigationstatus IS NOT NULL ORDER BY litigationstatus"))]
+            products = [r[0] for r in conn.execute(text(
+                "SELECT DISTINCT product_category_label FROM litigation_cases "
+                "WHERE product_category_label IS NOT NULL "
+                "ORDER BY product_category_label"))]
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Data not ready: {e}")
+
+    return {
+        "branches": branches,
+        "statuses": statuses,
+        "products": products,
+        # Fixed, ordered by urgency — not data-derived, so empty buckets still show.
+        "upcoming": ["No Date", "Not Updated", "Today", "Next 5 Working Days",
+                     "This Month", "Next Month", "Later"],
+        "defaults": DEFAULTS,
+    }
+
+
 @app.get("/api/cases")
 def get_cases(
     suit: str = Query("Negotiable Instrument Act (NI Act)"),
+    branch: str | None = Query(None),
+    upcoming: str | None = Query(None),
+    products: list[str] | None = Query(None),
+    statuses: list[str] | None = Query(None),
+    warrant: bool = Query(False),
+    q: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=1500),
 ):
     offset = (page - 1) * page_size
+    where, params = build_filters(suit=suit, branch=branch, upcoming=upcoming,
+                                  products=products, statuses=statuses,
+                                  warrant=warrant, q=q)
+    wc = where_clause(where)
     try:
         with engine.connect() as conn:
-            # COUNT uses the SAME filter as the page query, or total_pages lies.
+            # COUNT uses the SAME filters as the page query, or total_pages lies.
             total = conn.execute(
-                text("SELECT COUNT(*) FROM litigation_cases WHERE nature_of_suit = :suit"),
-                {"suit": suit},
+                text(f"SELECT COUNT(*) FROM litigation_cases {wc}"), params
             ).scalar()
 
             result = conn.execute(
-                text("""
-                    SELECT cif, clientname, accountnumber,
-                           caseid, branch, litigationstatus
+                text(f"""
+                    SELECT cif, clientname, accountnumber, caseid, branch,
+                           litigationstatus, upcoming, next_hearing_date
                     FROM litigation_cases
-                    WHERE nature_of_suit = :suit
-                    ORDER BY cif, caseid
+                    {wc}
+                    ORDER BY status_rank, cif, caseid
                     LIMIT :limit OFFSET :offset
                 """),
-                {"suit": suit, "limit": page_size, "offset": offset},
+                {**params, "limit": page_size, "offset": offset},
             )
             columns, rows = _rows(result)
     except Exception as e:
