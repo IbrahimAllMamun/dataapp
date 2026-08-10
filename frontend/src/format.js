@@ -1,7 +1,10 @@
 // Column name -> human label. Anything missing falls back to the raw key.
 export const LABELS = {
   caseid: "CaseID",
+  cif: "CIF",
   clientname: "Client Name",
+  accountnumber: "Account Number",
+  branch: "Branch",
   nature_of_suit: "Suit",
   suit_value: "Suit Value",
   suit_filing_date: "Suit Filing Date",

@@ -145,7 +145,7 @@ def get_cases(
             result = conn.execute(
                 text(f"""
                     SELECT cif, clientname, accountnumber, caseid, branch,
-                           litigationstatus, upcoming, next_hearing_date
+                           litigationstatus
                     FROM litigation_cases
                     {wc}
                     ORDER BY status_rank, cif, caseid

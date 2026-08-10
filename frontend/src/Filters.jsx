@@ -64,6 +64,13 @@ export default function Filters({ suit, value, onChange, onClear, total }) {
     );
   }
 
+  // The API orders labels alphabetically, which puts "Other" ahead of "SME".
+  // SME is the default selection and the one people scan for, so it leads.
+  // Sort is stable, so any other label keeps the server's order.
+  const products = [...options.products].sort(
+    (a, b) => (a === "SME" ? 0 : 1) - (b === "SME" ? 0 : 1)
+  );
+
   return (
     <div className="filters">
       <div className="filter-row">
@@ -114,7 +121,7 @@ export default function Filters({ suit, value, onChange, onClear, total }) {
       <div className="filter-row">
         <fieldset className="filter checks">
           <legend>Product Category</legend>
-          {options.products.map((p) => (
+          {products.map((p) => (
             <Chip
               key={p}
               checked={value.products.includes(p)}
