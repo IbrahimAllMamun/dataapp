@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { CheckIcon, CloseIcon, SearchIcon } from "./icons.jsx";
 
 /**
  * Filter panel.
@@ -8,6 +9,20 @@ import { useEffect, useState } from "react";
  * are applied through the SAME routine as "Clear all", so the opening view and
  * the reset view can never drift apart.
  */
+
+/** Checkbox styled as a toggle chip. The native input stays for a11y. */
+function Chip({ checked, onChange, children }) {
+  return (
+    <label className="check">
+      <input type="checkbox" checked={checked} onChange={onChange} />
+      <span className="box" aria-hidden="true">
+        <CheckIcon />
+      </span>
+      {children}
+    </label>
+  );
+}
+
 export default function Filters({ suit, value, onChange, onClear, total }) {
   const [options, setOptions] = useState(null);
   const [term, setTerm] = useState(value.q ?? "");
@@ -37,7 +52,17 @@ export default function Filters({ suit, value, onChange, onClear, total }) {
   const toggleIn = (list, item) =>
     list.includes(item) ? list.filter((x) => x !== item) : [...list, item];
 
-  if (!options) return <div className="filters muted">Loading filters…</div>;
+  if (!options) {
+    return (
+      <div className="filters" aria-busy="true">
+        <div className="filters-skeleton">
+          <span className="sk" style={{ "--sk-w": "190px" }} />
+          <span className="sk" style={{ "--sk-w": "190px" }} />
+          <span className="sk" style={{ "--sk-w": "260px" }} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="filters">
@@ -64,12 +89,25 @@ export default function Filters({ suit, value, onChange, onClear, total }) {
 
         <label className="filter grow">
           <span>Search client / CIF / account</span>
-          <input
-            type="search"
-            value={term}
-            placeholder="Type to narrow…"
-            onChange={(e) => setTerm(e.target.value)}
-          />
+          <div className="search-wrap">
+            <SearchIcon />
+            <input
+              type="search"
+              value={term}
+              placeholder="Type to narrow…"
+              onChange={(e) => setTerm(e.target.value)}
+            />
+            {term && (
+              <button
+                type="button"
+                className="search-clear"
+                onClick={() => setTerm("")}
+                aria-label="Clear search"
+              >
+                <CloseIcon />
+              </button>
+            )}
+          </div>
         </label>
       </div>
 
@@ -77,46 +115,44 @@ export default function Filters({ suit, value, onChange, onClear, total }) {
         <fieldset className="filter checks">
           <legend>Product Category</legend>
           {options.products.map((p) => (
-            <label key={p} className="check">
-              <input
-                type="checkbox"
-                checked={value.products.includes(p)}
-                onChange={() => set({ products: toggleIn(value.products, p) })}
-              />
+            <Chip
+              key={p}
+              checked={value.products.includes(p)}
+              onChange={() => set({ products: toggleIn(value.products, p) })}
+            >
               {p}
-            </label>
+            </Chip>
           ))}
         </fieldset>
 
         <fieldset className="filter checks">
           <legend>Litigation Status</legend>
           {options.statuses.map((s) => (
-            <label key={s} className="check">
-              <input
-                type="checkbox"
-                checked={value.statuses.includes(s)}
-                onChange={() => set({ statuses: toggleIn(value.statuses, s) })}
-              />
+            <Chip
+              key={s}
+              checked={value.statuses.includes(s)}
+              onChange={() => set({ statuses: toggleIn(value.statuses, s) })}
+            >
               {s}
-            </label>
+            </Chip>
           ))}
         </fieldset>
 
         <fieldset className="filter checks">
           <legend>Warrant</legend>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={value.warrant}
-              onChange={(e) => set({ warrant: e.target.checked })}
-            />
+          <Chip
+            checked={value.warrant}
+            onChange={(e) => set({ warrant: e.target.checked })}
+          >
             Warrant cases only
-          </label>
+          </Chip>
         </fieldset>
 
         <div className="filter actions">
           {typeof total === "number" && (
-            <span className="muted">{total.toLocaleString()} matching</span>
+            <span className="match-count">
+              <b>{total.toLocaleString()}</b> matching
+            </span>
           )}
           <button className="ghost" onClick={onClear}>Clear all</button>
         </div>

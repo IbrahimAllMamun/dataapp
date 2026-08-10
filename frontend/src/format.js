@@ -1,6 +1,7 @@
 // Column name -> human label. Anything missing falls back to the raw key.
 export const LABELS = {
   caseid: "CaseID",
+  clientname: "Client Name",
   nature_of_suit: "Suit",
   suit_value: "Suit Value",
   suit_filing_date: "Suit Filing Date",
@@ -52,6 +53,12 @@ const MONEY = new Set([
 const IDS = new Set(["caseid", "cif", "stmcode", "rmcode", "monitorbycode"]);
 
 const ISO_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
+
+// Columns that should render right-aligned in a tabular-numerals font, so
+// digits line up column-wise instead of jittering as pages change.
+export function isNumericColumn(column) {
+  return MONEY.has(column) || column === "aging" || column === "court_no";
+}
 
 export function formatCell(column, value) {
   if (value === null || value === undefined || value === "") return "—";
