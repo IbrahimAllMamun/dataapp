@@ -53,7 +53,34 @@ const MONEY = new Set([
 ]);
 
 // Identifiers are numeric in the DB but must never get thousands separators.
-const IDS = new Set(["caseid", "cif", "stmcode", "rmcode", "monitorbycode"]);
+const IDS = new Set([
+  "caseid", "cif", "plaintiffcif", "stmcode", "rmcode", "monitorbycode",
+]);
+
+// Name column -> the identifier that belongs beside it. The identifier is
+// folded into the name's cell as a badge rather than taking a column of its
+// own, so "Meghna Textiles Ltd." and its CIF read as one fact.
+export const IDENTITY_PAIRS = {
+  clientname: "cif",
+  plaintiff: "plaintiffcif",
+  stmname: "stmcode",
+  rmname: "rmcode",
+  monitorby: "monitorbycode",
+};
+
+/**
+ * Drops each identifier column that has been folded into a name column.
+ * An identifier is only dropped when its name column is actually present —
+ * otherwise it is the only carrier of that value and must keep its column.
+ */
+export function mergeIdentityColumns(columns) {
+  const folded = new Set(
+    Object.entries(IDENTITY_PAIRS)
+      .filter(([name]) => columns.includes(name))
+      .map(([, id]) => id)
+  );
+  return columns.filter((c) => !folded.has(c));
+}
 
 const ISO_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
 

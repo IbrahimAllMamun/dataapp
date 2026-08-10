@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { LABELS, formatCell, isNumericColumn } from "./format.js";
+import NameCell from "./NameCell.jsx";
+import { LABELS, formatCell, isNumericColumn, mergeIdentityColumns } from "./format.js";
 import { AlertIcon, CloseIcon } from "./icons.jsx";
 
 const EXIT_MS = 150;
@@ -8,12 +9,17 @@ const EXIT_MS = 150;
 function FieldGrid({ columns, rows }) {
   if (!rows?.length) return <p className="muted">No data.</p>;
 
+  // Same fold as the table: a CIF/code rides along with its name.
+  const cols = mergeIdentityColumns(columns);
+
   return rows.map((row, i) => (
     <dl className="fields" key={i}>
-      {columns.map((c) => (
+      {cols.map((c) => (
         <div className="field" key={c}>
           <dt>{LABELS[c] ?? c}</dt>
-          <dd className={isNumericColumn(c) ? "num" : undefined}>{formatCell(c, row[c])}</dd>
+          <dd className={isNumericColumn(c) ? "num" : undefined}>
+            <NameCell column={c} row={row} />
+          </dd>
         </div>
       ))}
     </dl>
@@ -152,7 +158,7 @@ export default function CaseDetails({ caseId, onClose }) {
         <div className="modal-head">
           <div>
             <h2>
-              Case <span className="case-id">{caseId}</span>
+              {details?.client?.clientname} <span className="case-id">{details?.client?.cif}</span>
             </h2>
             {client && <p className="subtitle">{client}</p>}
           </div>

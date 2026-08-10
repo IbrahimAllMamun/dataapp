@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import CaseDetails from "./CaseDetails.jsx";
 import Filters from "./Filters.jsx";
-import { LABELS, formatCell, isNumericColumn } from "./format.js";
+import NameCell from "./NameCell.jsx";
+import { LABELS, formatCell, isNumericColumn, mergeIdentityColumns } from "./format.js";
 import { AlertIcon, EmptyIcon, MoonIcon, ScalesIcon, SunIcon } from "./icons.jsx";
 
 // Tab label -> the exact `nature_of_suit` value stored in litigation_cases.
@@ -95,6 +96,7 @@ export default function App() {
   const [pageSize, setPageSize] = useState(50);
 
   const [data, setData] = useState(null);
+  const [reportdate, setReportdate] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -150,6 +152,23 @@ export default function App() {
         setLoading(false);
       });
 
+    fetch(`/api/reportdate`, { signal: ctrl.signal })
+      .then(async (res) => {
+        const body = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(body?.detail || `Request failed (${res.status})`);
+        return body;
+      })
+      .then((body) => {
+        setReportdate(body.reportdate);
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (err.name === "AbortError") return; // superseded by a newer request
+        setError(err.message);
+        setReportdate(null);
+        setLoading(false);
+      });
+
     return () => ctrl.abort();
   }, [tab, page, pageSize, filters]);
 
@@ -168,7 +187,9 @@ export default function App() {
   }, []);
 
   const totalPages = data?.total_pages ?? 0;
-  const columns = data?.columns ?? [];
+  // Identifier columns are folded into their name column's cell, so they must
+  // not also get a column of their own.
+  const columns = mergeIdentityColumns(data?.columns ?? []);
   const rows = data?.rows ?? [];
   const tabIndex = TABS.findIndex((t) => t.key === tab.key);
   const animatedTotal = useCountUp(data?.total);
@@ -236,7 +257,7 @@ export default function App() {
         value={filters}
         onChange={changeFilters}
         onClear={clearFilters}
-        total={data?.total}
+        total={reportdate}
       />
 
       {error && (
@@ -322,7 +343,7 @@ export default function App() {
                               {formatCell(c, row[c])}
                             </span>
                           ) : (
-                            formatCell(c, row[c])
+                            <NameCell column={c} row={row} />
                           )}
                         </td>
                       ))}

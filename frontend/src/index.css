@@ -438,6 +438,26 @@ th.num { text-align: right; }
 .badge.active::before { animation: breathe 2.4s var(--ease) infinite; }
 .badge.inactive { background: var(--off-bg); color: var(--off-fg); }
 
+/* A name with its identifier folded in. */
+.named { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+
+/* Identifier badge. Shares the status green but drops the status dot and
+   switches to tabular mono, so a CIF never reads as a status pill. */
+.badge.cif {
+  padding: 2px 8px;
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+  font-family: var(--mono);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.badge.cif::before { content: none; }
+
+/* In the modal's value grid the name may wrap, so the badge sits below it
+   rather than squeezing the name into a sliver. */
+.field .named { flex-wrap: wrap; gap: 4px 8px; }
+
 /* ------------------------------------------------------- states & loaders */
 .muted { color: var(--text-3); }
 .center { text-align: center; padding: 40px 16px; }

@@ -69,11 +69,12 @@ def _rows(result):
 
 # Columns pulled from litigation_cases, split into two logical views but fetched
 # in ONE query (same row, same WHERE) to avoid a second round-trip.
-_LEGAL_COLS = ["nature_of_suit","suit_value","suit_filing_date","law_firm",
+_CLIENT_COLS = ["cif", "clientname", "branch"]
+_LEGAL_COLS = ["caseid", "nature_of_suit","suit_value","suit_filing_date","law_firm",
                "court_no","plaintiff","plaintiffcif","next_hearing_date",
                "cheque_number","litigation_receivable","aging","present_case_status",
                "litigationstatus"]
-_LOAN_COLS = ["caseid", "product_category", "stmcode", "stmname", "rmcode",
+_LOAN_COLS = ["accountnumber", "product_category", "stmcode", "stmname", "rmcode",
               "rmname", "monitorbycode", "monitorby", "urpa", "mod",
               "overdue_amount", "principal_od", "interest_od", "lpi",
               "netexcisedutytilllastyear", "netexcisedutytillcurrentyear"]
@@ -174,7 +175,7 @@ def get_case_details(caseid: int):
             # One query for both legal + loan views (same row in litigation_cases).
             case_res = conn.execute(
                 text(f"""
-                    SELECT {", ".join(dict.fromkeys(_LEGAL_COLS + _LOAN_COLS))}
+                    SELECT {", ".join(dict.fromkeys(_CLIENT_COLS + _LEGAL_COLS + _LOAN_COLS))}
                     FROM litigation_cases
                     WHERE caseid = :caseid
                 """),
@@ -218,11 +219,31 @@ def get_case_details(caseid: int):
         raise HTTPException(status_code=404, detail=f"No case found for caseid={caseid}")
 
     # Project the single fetched row-set into the two views the frontend expects.
+    client_rows = [{k: r[k] for k in _CLIENT_COLS} for r in case_rows]
     legal_rows = [{k: r[k] for k in _LEGAL_COLS} for r in case_rows]
     loan_rows = [{k: r[k] for k in _LOAN_COLS} for r in case_rows]
 
     return {
+        "client":  {"columns": _CLIENT_COLS,  "rows": client_rows},
         "legal":   {"columns": _LEGAL_COLS,   "rows": legal_rows},
         "loan":    {"columns": _LOAN_COLS,    "rows": loan_rows},
         "history": {"columns": history_columns, "rows": history_rows},
     }
+
+
+
+
+
+
+
+@app.get("/api/reportdate")
+def get_reportdate():
+    try:
+        with engine.connect() as conn:
+            # COUNT uses the SAME filters as the page query, or total_pages lies.
+            reportdate = conn.execute(text(f"SELECT DISTINCT reportdate FROM litigation_cases")).scalar()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Data not ready: {e}")
+    
+    return {"reportdate": reportdate}
+
