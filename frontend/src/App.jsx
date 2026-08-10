@@ -2,7 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import CaseDetails from "./CaseDetails.jsx";
 import Filters from "./Filters.jsx";
 import NameCell from "./NameCell.jsx";
-import { LABELS, formatCell, isNumericColumn, mergeIdentityColumns } from "./format.js";
+import {
+  LABELS,
+  formatCell,
+  formatDate,
+  isNumericColumn,
+  mergeIdentityColumns,
+} from "./format.js";
 import { AlertIcon, EmptyIcon, MoonIcon, ScalesIcon, SunIcon } from "./icons.jsx";
 
 // Tab label -> the exact `nature_of_suit` value stored in litigation_cases.
@@ -152,25 +158,22 @@ export default function App() {
         setLoading(false);
       });
 
-    fetch(`/api/reportdate`, { signal: ctrl.signal })
-      .then(async (res) => {
-        const body = await res.json().catch(() => null);
-        if (!res.ok) throw new Error(body?.detail || `Request failed (${res.status})`);
-        return body;
-      })
-      .then((body) => {
-        setReportdate(body.reportdate);
-        setLoading(false);
-      })
-      .catch((err) => {
-        if (err.name === "AbortError") return; // superseded by a newer request
-        setError(err.message);
-        setReportdate(null);
-        setLoading(false);
-      });
-
     return () => ctrl.abort();
   }, [tab, page, pageSize, filters]);
+
+  // The report date describes the warehouse as a whole, so it neither depends
+  // on the filters nor belongs to the table's loading/error state — a failure
+  // here just hides the pill instead of blanking the table.
+  useEffect(() => {
+    const ctrl = new AbortController();
+
+    fetch("/api/reportdate", { signal: ctrl.signal })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => body && setReportdate(body.reportdate))
+      .catch(() => {});
+
+    return () => ctrl.abort();
+  }, []);
 
   const selectTab = useCallback((next) => {
     setTab(next);
@@ -216,9 +219,9 @@ export default function App() {
         </div>
 
         <div className="masthead-actions">
-          {data && (
-            <span className="total">
-              <b>{animatedTotal.toLocaleString()}</b> cases
+          {reportdate && (
+            <span className="total" title="The date this data was extracted">
+              Report date <b>{formatDate(reportdate)}</b>
             </span>
           )}
           <button
@@ -257,7 +260,7 @@ export default function App() {
         value={filters}
         onChange={changeFilters}
         onClear={clearFilters}
-        total={reportdate}
+        total={data?.total}
       />
 
       {error && (

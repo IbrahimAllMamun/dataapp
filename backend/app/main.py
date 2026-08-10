@@ -241,7 +241,7 @@ def get_reportdate():
     try:
         with engine.connect() as conn:
             # COUNT uses the SAME filters as the page query, or total_pages lies.
-            reportdate = conn.execute(text(f"SELECT DISTINCT reportdate FROM litigation_cases")).scalar()
+            reportdate = conn.execute(text(f"SELECT DISTINCT reportpreparationdate FROM litigation_cases")).scalar()
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Data not ready: {e}")
     

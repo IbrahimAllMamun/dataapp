@@ -23,7 +23,7 @@ function Chip({ checked, onChange, children }) {
   );
 }
 
-export default function Filters({ suit, value, onChange, onClear, reportdate }) {
+export default function Filters({ suit, value, onChange, onClear, total }) {
   const [options, setOptions] = useState(null);
   const [term, setTerm] = useState(value.q ?? "");
 
@@ -156,9 +156,9 @@ export default function Filters({ suit, value, onChange, onClear, reportdate }) 
         </fieldset>
 
         <div className="filter actions">
-          {typeof reportdate === "string" && (
+          {typeof total === "number" && (
             <span className="match-count">
-              <b>{reportdate}</b> Report Date
+              <b>{total.toLocaleString()}</b> matching
             </span>
           )}
           <button className="ghost" onClick={onClear}>Clear all</button>

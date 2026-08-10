@@ -136,7 +136,9 @@ export default function CaseDetails({ caseId, onClose }) {
     };
   }, [dismiss]);
 
-  const client = details?.legal?.rows?.[0]?.clientname;
+  // /api/case returns each view as { columns, rows } — the client fields live
+  // on the row, not on the section itself.
+  const client = details?.client?.rows?.[0];
 
   // Reversing the entry animations is enough of an exit — no extra keyframes.
   const exitStyle = closing
@@ -156,11 +158,20 @@ export default function CaseDetails({ caseId, onClose }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-head">
-          <div>
+          <div className="case-head">
+            {/* Falls back to the case id until the payload lands, so the
+                header is never momentarily blank. */}
             <h2>
-              {details?.client?.clientname} <span className="case-id">{details?.client?.cif}</span>
+              {client?.clientname ?? `Case ${caseId}`}
+              {client?.cif != null && client.cif !== "" && (
+                <span className="badge cif" title={LABELS.cif}>
+                  {formatCell("cif", client.cif)}
+                </span>
+              )}
             </h2>
-            {client && <p className="subtitle">{client}</p>}
+            {client?.branch && (
+              <p className="subtitle">{formatCell("branch", client.branch)}</p>
+            )}
           </div>
           <button className="icon-btn" onClick={dismiss} aria-label="Close">
             <CloseIcon />

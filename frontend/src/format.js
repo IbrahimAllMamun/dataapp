@@ -83,6 +83,31 @@ export function mergeIdentityColumns(columns) {
 }
 
 const ISO_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Formats a date or datetime string for display. Unlike formatCell this also
+ * accepts a bare "2026-08-10" — /api/reportdate returns a DATE, not a
+ * timestamp. Unparseable input is returned unchanged rather than swallowed.
+ */
+export function formatDate(value) {
+  if (value === null || value === undefined || value === "") return null;
+
+  const s = String(value).trim();
+  const isDate = ISO_DATE.test(s);
+  if (!isDate && !ISO_DATETIME.test(s)) return s;
+
+  // A bare date parses as UTC midnight, which renders as the previous day west
+  // of Greenwich — pin it to local midnight instead.
+  const d = new Date(isDate ? `${s}T00:00:00` : s);
+  if (Number.isNaN(d.getTime())) return s;
+
+  return d.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
+}
 
 // Columns that should render right-aligned in a tabular-numerals font, so
 // digits line up column-wise instead of jittering as pages change.
