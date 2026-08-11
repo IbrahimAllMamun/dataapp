@@ -17,16 +17,29 @@ log = logging.getLogger("api")
 scheduler = AsyncIOScheduler(timezone="Asia/Dhaka")
 
 
+# create_task() must be kept alive by a strong reference — the event loop only
+# holds a weak one, so a bare call can be collected mid-sync.m
+_boot_sync: asyncio.Task | None = None
+
+
 async def run_sync_async():
     """Run the blocking sync in a threadpool so it never blocks the event loop."""
-    await asyncio.to_thread(run_sync)
+    try:
+        await asyncio.to_thread(run_sync)
+    except Exception:
+        # Without this the failure is invisible: sync.main()'s handler only
+        # covers `python -m app.sync`, so on this path the exception just parks
+        # on the Task until garbage collection, if it is ever reported at all.
+        log.exception("sync FAILED — Postgres left unchanged")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _boot_sync
+
     scheduler.add_job(
         run_sync_async,
-        CronTrigger(hour=6, minute=0),
+        CronTrigger(hour=10, minute=38),
         id="daily_sync",
         max_instances=1,
         coalesce=True,
@@ -34,8 +47,11 @@ async def lifespan(app: FastAPI):
     )
     scheduler.start()
     # Seed once on boot so the API isn't querying empty tables until 6am.
-    asyncio.create_task(run_sync_async())
+    # NOTE: uvicorn runs with --reload and backend/app is bind-mounted, so every
+    # save of a backend file restarts the app and starts this sync over.
+    _boot_sync = asyncio.create_task(run_sync_async())
     yield
+    _boot_sync.cancel()
     scheduler.shutdown(wait=False)
 
 
@@ -145,11 +161,10 @@ def get_cases(
 
             result = conn.execute(
                 text(f"""
-                    SELECT cif, clientname, accountnumber, caseid, branch,
-                           litigationstatus
+                    SELECT cif, clientname, accountnumber, caseid, branch, litigationstatus
                     FROM litigation_cases
                     {wc}
-                    ORDER BY status_rank, cif, caseid
+                    ORDER BY suit_filing_date DESC, status_rank, cif, caseid
                     LIMIT :limit OFFSET :offset
                 """),
                 {**params, "limit": page_size, "offset": offset},
