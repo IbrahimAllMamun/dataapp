@@ -238,12 +238,23 @@ def get_case_details(caseid: int):
 
 @app.get("/api/reportdate")
 def get_reportdate():
+    """Extraction date of the current warehouse contents.
+
+    The column is `reportpreparationdate` — sync.py normalizes the source's
+    [ReportPreparationDate] by lowercasing, and the name has no spaces to turn
+    into underscores.
+
+    sync.py filters the source on its MAX(ReportPreparationDate), so every row
+    carries the same value; MAX keeps this deterministic anyway if a partial
+    sync ever leaves more than one behind.
+    """
     try:
         with engine.connect() as conn:
-            # COUNT uses the SAME filters as the page query, or total_pages lies.
-            reportdate = conn.execute(text(f"SELECT DISTINCT reportpreparationdate FROM litigation_cases")).scalar()
+            reportdate = conn.execute(
+                text("SELECT MAX(reportpreparationdate) FROM litigation_cases")
+            ).scalar()
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Data not ready: {e}")
-    
+
     return {"reportdate": reportdate}
 

@@ -844,8 +844,20 @@ fieldset.checks legend { padding: 0 5px; }
 .field dd { margin: 0; font-size: 0.8125rem; font-weight: 540; word-break: break-word; }
 .field dd.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 
+/* The history table is NOT its own scroll region. .table-scroll is written for
+   the cases table, where a max-height and contained overscroll are right; here
+   both are wrong — the cap hides rows, and `contain` swallows the wheel before
+   it ever reaches .modal-body, so pointing at the table froze the card.
+   Height follows the content, and horizontal overflow still scrolls. */
+.modal-body .table-scroll {
+  max-height: none;
+  overscroll-behavior: auto;
+}
+
 table.inner { border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
-table.inner th { background: var(--surface-2); backdrop-filter: none; }
+/* Sticky would now resolve against .modal-body and float this header over the
+   sections above and below it. */
+table.inner th { position: static; background: var(--surface-2); backdrop-filter: none; }
 table.inner tbody tr { transition: background var(--fast) var(--ease); }
 table.inner tbody tr:hover td { background: var(--surface-2); }
 

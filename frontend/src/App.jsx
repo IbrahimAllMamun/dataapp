@@ -168,9 +168,18 @@ export default function App() {
     const ctrl = new AbortController();
 
     fetch("/api/reportdate", { signal: ctrl.signal })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((body) => body && setReportdate(body.reportdate))
-      .catch(() => {});
+      .then(async (res) => {
+        const body = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(body?.detail || `Request failed (${res.status})`);
+        return body;
+      })
+      .then((body) => setReportdate(body.reportdate))
+      .catch((err) => {
+        if (err.name === "AbortError") return;
+        // Metadata only, so this never blanks the table — but it has to say
+        // something, or a broken endpoint looks identical to "no date yet".
+        console.warn("Could not load the report date:", err.message);
+      });
 
     return () => ctrl.abort();
   }, []);
