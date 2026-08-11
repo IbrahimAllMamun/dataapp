@@ -273,3 +273,23 @@ def get_reportdate():
 
     return {"reportdate": reportdate}
 
+
+@app.get("/api/summary")
+def get_summary():
+    """
+    Summary counts of cases by status, product, and branch. The frontend uses
+    these to populate the dashboard's summary cards and pie charts. The counts
+    are scoped to the current suit filter, so the user sees only the relevant
+    breakdowns for the selected suit. The SQL query aggregates the counts and
+    returns them in a structured format for easy consumption by the frontend.
+    """
+    try:
+        with engine.connect() as conn:
+            reportdate = conn.execute(
+                text("SELECT MAX(reportpreparationdate) FROM litigation_cases")
+            ).scalar()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Data not ready: {e}")
+
+    return {"reportdate": reportdate}
+

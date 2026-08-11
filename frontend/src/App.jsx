@@ -9,7 +9,15 @@ import {
   isNumericColumn,
   mergeIdentityColumns,
 } from "./format.js";
-import { AlertIcon, EmptyIcon, MoonIcon, ScalesIcon, SunIcon } from "./icons.jsx";
+import {
+  AlertIcon,
+  CloseIcon,
+  EmptyIcon,
+  FilterIcon,
+  MoonIcon,
+  ScalesIcon,
+  SunIcon,
+} from "./icons.jsx";
 
 // Tab label -> the exact `nature_of_suit` value stored in litigation_cases.
 const TABS = [
@@ -46,7 +54,7 @@ const prefersReducedMotion = () =>
 /** Light/dark, persisted. index.html stamps the initial value before paint. */
 function useTheme() {
   const [theme, setTheme] = useState(
-    () => document.documentElement.getAttribute("data-theme") || "light"
+    () => document.documentElement.getAttribute("data-theme") || "light",
   );
 
   useEffect(() => {
@@ -59,39 +67,6 @@ function useTheme() {
   }, [theme]);
 
   return [theme, () => setTheme((t) => (t === "dark" ? "light" : "dark"))];
-}
-
-/** Eases a number toward its target so the case count doesn't just snap. */
-function useCountUp(target, duration = 520) {
-  const [display, setDisplay] = useState(target ?? 0);
-  const fromRef = useRef(target ?? 0);
-
-  useEffect(() => {
-    if (typeof target !== "number") return;
-    if (prefersReducedMotion()) {
-      fromRef.current = target;
-      setDisplay(target);
-      return;
-    }
-
-    const from = fromRef.current;
-    const delta = target - from;
-    if (delta === 0) return;
-
-    let raf;
-    const start = performance.now();
-    const tick = (now) => {
-      const t = Math.min((now - start) / duration, 1);
-      const eased = 1 - Math.pow(1 - t, 3); // ease-out cubic
-      setDisplay(Math.round(from + delta * eased));
-      if (t < 1) raf = requestAnimationFrame(tick);
-      else fromRef.current = target;
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [target, duration]);
-
-  return display;
 }
 
 export default function App() {
@@ -109,6 +84,10 @@ export default function App() {
   const [openCaseId, setOpenCaseId] = useState(null);
 
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
+
+  // Only meaningful below the sidebar breakpoint, where the filters become an
+  // off-canvas drawer. Above it the sidebar is always in the layout.
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const scrollRef = useRef(null);
 
@@ -133,8 +112,10 @@ export default function App() {
       page: String(page),
       page_size: String(pageSize),
     });
-    if (filters.branch && filters.branch !== "All") qs.set("branch", filters.branch);
-    if (filters.upcoming && filters.upcoming !== "All") qs.set("upcoming", filters.upcoming);
+    if (filters.branch && filters.branch !== "All")
+      qs.set("branch", filters.branch);
+    if (filters.upcoming && filters.upcoming !== "All")
+      qs.set("upcoming", filters.upcoming);
     if (filters.warrant) qs.set("warrant", "true");
     if (filters.q) qs.set("q", filters.q);
     // Repeated keys -> FastAPI list params.
@@ -144,7 +125,8 @@ export default function App() {
     fetch(`/api/cases?${qs}`, { signal: ctrl.signal })
       .then(async (res) => {
         const body = await res.json().catch(() => null);
-        if (!res.ok) throw new Error(body?.detail || `Request failed (${res.status})`);
+        if (!res.ok)
+          throw new Error(body?.detail || `Request failed (${res.status})`);
         return body;
       })
       .then((body) => {
@@ -170,7 +152,8 @@ export default function App() {
     fetch("/api/reportdate", { signal: ctrl.signal })
       .then(async (res) => {
         const body = await res.json().catch(() => null);
-        if (!res.ok) throw new Error(body?.detail || `Request failed (${res.status})`);
+        if (!res.ok)
+          throw new Error(body?.detail || `Request failed (${res.status})`);
         return body;
       })
       .then((body) => setReportdate(body.reportdate))
@@ -204,7 +187,6 @@ export default function App() {
   const columns = mergeIdentityColumns(data?.columns ?? []);
   const rows = data?.rows ?? [];
   const tabIndex = TABS.findIndex((t) => t.key === tab.key);
-  const animatedTotal = useCountUp(data?.total);
 
   // First load has nothing to show yet; later loads keep the previous page on
   // screen (dimmed, with a progress bar) rather than blanking the table.
@@ -214,207 +196,299 @@ export default function App() {
   // Changing this remounts <tbody>, which restarts the row cascade.
   const bodyKey = `${tab.key}|${page}|${pageSize}|${data?.total ?? "-"}`;
 
-  return (
-    <div className="wrap">
-      <header className="masthead">
-        <div className="brand">
-          <div className="brand-mark">
-            <ScalesIcon />
-          </div>
-          <div>
-            <h1>Litigation Cases</h1>
-            <p className="subtitle">{tab.suit}</p>
-          </div>
-        </div>
+  // Escape closes the filter drawer, and the page behind it stays put while
+  // it is open. Neither applies above the breakpoint, where it is never open.
+  useEffect(() => {
+    if (!drawerOpen) return;
 
-        <div className="masthead-actions">
-          {reportdate && (
-            <span className="total" title="The date this data was extracted">
-              Report date <b>{formatDate(reportdate)}</b>
-            </span>
-          )}
-          <button
-            className="icon-btn"
-            onClick={toggleTheme}
-            aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
-            title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+    const onKey = (e) => e.key === "Escape" && setDrawerOpen(false);
+    window.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [drawerOpen]);
+
+  return (
+    <div className="app">
+      <header className="topbar">
+        <div className="topbar-inner">
+          <div className="topbar-left">
+            {/* Drawer control. CSS hides it above the sidebar breakpoint. */}
+            <button
+              className="icon-btn filter-toggle"
+              onClick={() => setDrawerOpen(true)}
+              aria-label="Show filters"
+              aria-expanded={drawerOpen}
+              title="Show filters"
+            >
+              <FilterIcon />
+            </button>
+
+            <div className="brand">
+              <div className="brand-mark">
+                <ScalesIcon />
+              </div>
+              <h1>Litigation Cases</h1>
+            </div>
+          </div>
+
+          <nav
+            className="tabs"
+            role="tablist"
+            aria-label="Suit type"
+            style={{
+              "--tab-count": TABS.length,
+              "--tab-index": Math.max(tabIndex, 0),
+            }}
           >
-            <span className="theme-icon">
-              {theme === "dark" ? <SunIcon /> : <MoonIcon />}
-            </span>
-          </button>
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                role="tab"
+                aria-selected={t.key === tab.key}
+                className={`tab${t.key === tab.key ? " active" : ""}`}
+                onClick={() => selectTab(t)}
+              >
+                {t.key}
+              </button>
+            ))}
+          </nav>
+
+          <div className="topbar-right">
+            {reportdate && (
+              <span className="total" title="The date this data was extracted">
+                Report date <b>{formatDate(reportdate)}</b>
+              </span>
+            )}
+            <button
+              className="icon-btn"
+              onClick={toggleTheme}
+              aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+              title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+            >
+              <span className="theme-icon">
+                {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+              </span>
+            </button>
+          </div>
         </div>
       </header>
 
-      <nav
-        className="tabs"
-        role="tablist"
-        style={{ "--tab-count": TABS.length, "--tab-index": Math.max(tabIndex, 0) }}
-      >
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            role="tab"
-            aria-selected={t.key === tab.key}
-            className={`tab${t.key === tab.key ? " active" : ""}`}
-            onClick={() => selectTab(t)}
+      <div className="wrap">
+        <div className="layout">
+          {drawerOpen && (
+            <div
+              className="drawer-backdrop"
+              onClick={() => setDrawerOpen(false)}
+            />
+          )}
+
+          <aside
+            className={`sidebar${drawerOpen ? " open" : ""}`}
+            aria-label="Filters"
           >
-            {t.key}
-          </button>
-        ))}
-      </nav>
-
-      <Filters
-        suit={tab.suit}
-        value={filters}
-        onChange={changeFilters}
-        onClear={clearFilters}
-        total={data?.total}
-      />
-
-      {error && (
-        <div className="error" role="alert">
-          <AlertIcon />
-          <div>
-            <strong>Could not load cases.</strong> {error}
-          </div>
-        </div>
-      )}
-
-      {!error && (
-        <div className="panel">
-          {refreshing && <div className="loadbar" role="status" aria-label="Loading" />}
-
-          <div
-            className="table-scroll"
-            ref={scrollRef}
-            style={{
-              opacity: refreshing ? 0.55 : 1,
-              transition: "opacity 160ms var(--ease)",
-            }}
-          >
-            <table>
-              <thead>
-                <tr>
-                  {(columns.length ? columns : Array.from({ length: SKELETON_COLS })).map(
-                    (c, i) => (
-                      <th key={c ?? i} className={c && isNumericColumn(c) ? "num" : undefined}>
-                        {c ? LABELS[c] ?? c : " "}
-                      </th>
-                    )
-                  )}
-                </tr>
-              </thead>
-
-              <tbody key={bodyKey}>
-                {showSkeleton &&
-                  Array.from({ length: SKELETON_ROWS }).map((_, r) => (
-                    <tr className="sk-row" key={r}>
-                      {Array.from({ length: columns.length || SKELETON_COLS }).map((_, c) => (
-                        <td key={c}>
-                          {/* varied widths so the placeholder reads as data, not bars */}
-                          <span className="sk" style={{ "--sk-w": `${45 + ((c * 37) % 45)}%` }} />
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-
-                {!showSkeleton && rows.length === 0 && (
-                  <tr>
-                    <td colSpan={columns.length || SKELETON_COLS}>
-                      <div className="empty">
-                        <EmptyIcon />
-                        <strong>No matching cases</strong>
-                        <span>Try widening the filters or clearing the search.</span>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-
-                {!showSkeleton &&
-                  rows.map((row, i) => (
-                    <tr
-                      key={row.caseid}
-                      className="row-click row-in"
-                      style={{ animationDelay: `${Math.min(i, STAGGER_CAP) * STAGGER_MS}ms` }}
-                      tabIndex={0}
-                      onClick={() => setOpenCaseId(row.caseid)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          setOpenCaseId(row.caseid);
-                        }
-                      }}
-                    >
-                      {columns.map((c) => (
-                        <td key={c} className={isNumericColumn(c) ? "num" : undefined}>
-                          {c === "litigationstatus" ? (
-                            <span
-                              className={`badge ${row[c] === "Active" ? "active" : "inactive"}`}
-                            >
-                              {formatCell(c, row[c])}
-                            </span>
-                          ) : (
-                            <NameCell column={c} row={row} />
-                          )}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="pager">
-            <label className="page-size">
-              Rows
-              <select
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(Number(e.target.value));
-                  setPage(1); // offsets shift, so the old page number is stale
-                }}
-              >
-                {PAGE_SIZES.map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <div className="pager-nav">
-              <button className="ghost" disabled={loading || page <= 1} onClick={() => goToPage(1)}>
-                « First
-              </button>
+            <div className="sidebar-head">
+              <h2>Filters</h2>
               <button
-                className="ghost"
-                disabled={loading || page <= 1}
-                onClick={() => goToPage(page - 1)}
+                className="icon-btn drawer-close"
+                onClick={() => setDrawerOpen(false)}
+                aria-label="Hide filters"
               >
-                ‹ Prev
-              </button>
-              <span className="page-info">
-                Page <b>{page.toLocaleString()}</b> of {(totalPages || 1).toLocaleString()}
-              </span>
-              <button
-                className="ghost"
-                disabled={loading || page >= totalPages}
-                onClick={() => goToPage(page + 1)}
-              >
-                Next ›
-              </button>
-              <button
-                className="ghost"
-                disabled={loading || page >= totalPages}
-                onClick={() => goToPage(totalPages)}
-              >
-                Last »
+                <CloseIcon />
               </button>
             </div>
-          </div>
+
+            <Filters
+              suit={tab.suit}
+              value={filters}
+              onChange={changeFilters}
+              onClear={clearFilters}
+              total={data?.total}
+            />
+          </aside>
+
+          <main className="content">
+            <h2 className="content-title">{tab.suit}</h2>
+
+            {error && (
+              <div className="error" role="alert">
+                <AlertIcon />
+                <div>
+                  <strong>Could not load cases.</strong> {error}
+                </div>
+              </div>
+            )}
+
+            {!error && (
+              <div className="panel">
+                {refreshing && (
+                  <div className="loadbar" role="status" aria-label="Loading" />
+                )}
+
+                <div
+                  className="table-scroll"
+                  ref={scrollRef}
+                  style={{
+                    opacity: refreshing ? 0.55 : 1,
+                    transition: "opacity 160ms var(--ease)",
+                  }}
+                >
+                  <table>
+                    <thead>
+                      <tr>
+                        {(columns.length
+                          ? columns
+                          : Array.from({ length: SKELETON_COLS })
+                        ).map((c, i) => (
+                          <th
+                            key={c ?? i}
+                            className={
+                              c && isNumericColumn(c) ? "num" : undefined
+                            }
+                          >
+                            {c ? (LABELS[c] ?? c) : " "}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+
+                    <tbody key={bodyKey}>
+                      {showSkeleton &&
+                        Array.from({ length: SKELETON_ROWS }).map((_, r) => (
+                          <tr className="sk-row" key={r}>
+                            {Array.from({
+                              length: columns.length || SKELETON_COLS,
+                            }).map((_, c) => (
+                              <td key={c}>
+                                {/* varied widths so the placeholder reads as data, not bars */}
+                                <span
+                                  className="sk"
+                                  style={{
+                                    "--sk-w": `${45 + ((c * 37) % 45)}%`,
+                                  }}
+                                />
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+
+                      {!showSkeleton && rows.length === 0 && (
+                        <tr>
+                          <td colSpan={columns.length || SKELETON_COLS}>
+                            <div className="empty">
+                              <EmptyIcon />
+                              <strong>No matching cases</strong>
+                              <span>
+                                Try widening the filters or clearing the search.
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+
+                      {!showSkeleton &&
+                        rows.map((row, i) => (
+                          <tr
+                            key={row.caseid}
+                            className="row-click row-in"
+                            style={{
+                              animationDelay: `${Math.min(i, STAGGER_CAP) * STAGGER_MS}ms`,
+                            }}
+                            tabIndex={0}
+                            onClick={() => setOpenCaseId(row.caseid)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                setOpenCaseId(row.caseid);
+                              }
+                            }}
+                          >
+                            {columns.map((c) => (
+                              <td
+                                key={c}
+                                className={
+                                  isNumericColumn(c) ? "num" : undefined
+                                }
+                              >
+                                {c === "litigationstatus" ? (
+                                  <span
+                                    className={`badge ${row[c] === "Active" ? "active" : "inactive"}`}
+                                  >
+                                    {formatCell(c, row[c])}
+                                  </span>
+                                ) : (
+                                  <NameCell column={c} row={row} />
+                                )}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="pager">
+                  <label className="page-size">
+                    Rows
+                    <select
+                      value={pageSize}
+                      onChange={(e) => {
+                        setPageSize(Number(e.target.value));
+                        setPage(1); // offsets shift, so the old page number is stale
+                      }}
+                    >
+                      {PAGE_SIZES.map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <div className="pager-nav">
+                    <button
+                      className="ghost"
+                      disabled={loading || page <= 1}
+                      onClick={() => goToPage(1)}
+                    >
+                      « First
+                    </button>
+                    <button
+                      className="ghost"
+                      disabled={loading || page <= 1}
+                      onClick={() => goToPage(page - 1)}
+                    >
+                      ‹ Prev
+                    </button>
+                    <span className="page-info">
+                      Page <b>{page.toLocaleString()}</b> of{" "}
+                      {(totalPages || 1).toLocaleString()}
+                    </span>
+                    <button
+                      className="ghost"
+                      disabled={loading || page >= totalPages}
+                      onClick={() => goToPage(page + 1)}
+                    >
+                      Next ›
+                    </button>
+                    <button
+                      className="ghost"
+                      disabled={loading || page >= totalPages}
+                      onClick={() => goToPage(totalPages)}
+                    >
+                      Last »
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </main>
         </div>
-      )}
+      </div>
 
       {openCaseId !== null && (
         <CaseDetails caseId={openCaseId} onClose={() => setOpenCaseId(null)} />

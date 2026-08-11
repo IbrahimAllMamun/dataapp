@@ -63,6 +63,14 @@ export function EmptyIcon(props) {
   );
 }
 
+export function FilterIcon(props) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" {...stroke} {...props}>
+      <path d="M4 6.5h16M7 12h10M10 17.5h4" />
+    </svg>
+  );
+}
+
 export function SunIcon(props) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" {...stroke} {...props}>
