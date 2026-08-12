@@ -312,7 +312,6 @@ export default function App() {
           </aside>
 
           <main className="content">
-            <h2 className="content-title">{tab.suit}</h2>
 
             {error && (
               <div className="error" role="alert">

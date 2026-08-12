@@ -63,6 +63,14 @@ export function EmptyIcon(props) {
   );
 }
 
+export function ChevronIcon(props) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" {...stroke} {...props}>
+      <path d="m7 10 5 5 5-5" />
+    </svg>
+  );
+}
+
 export function FilterIcon(props) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" {...stroke} {...props}>

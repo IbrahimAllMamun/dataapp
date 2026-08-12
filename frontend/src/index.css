@@ -805,6 +805,105 @@ fieldset.checks legend { padding: 0 5px; }
 .check:has(input:checked) .box svg { stroke-dashoffset: 0; }
 .check:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
 
+/* ------------------------------------------------- multi-select dropdown */
+.ms { position: relative; }
+
+.ms-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 190px;
+  padding: 7px 9px 7px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  text-align: left;
+}
+.ms-trigger:not(:disabled):hover { background: var(--surface); border-color: var(--line-strong); }
+.ms-trigger.open {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+.ms-trigger svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  color: var(--text-3);
+  transition: transform var(--base) var(--ease);
+}
+.ms-trigger.open svg { transform: rotate(180deg); }
+
+.ms-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* "None" is a real state — no category ticked matches nothing. */
+.ms-summary.none { color: var(--text-3); }
+
+.ms-panel {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 260px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  animation: pop 160ms var(--ease-out) both;
+}
+
+.ms-option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border-radius: var(--r-sm);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--fast) var(--ease);
+}
+.ms-option:hover { background: var(--surface-3); }
+.ms-option input { position: absolute; opacity: 0; pointer-events: none; }
+.ms-option:has(input:checked) { color: var(--accent); font-weight: 560; }
+.ms-option:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* Reuses the chip checkbox mark. */
+.ms-option .box {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 4px;
+  background: var(--surface);
+  transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease);
+}
+.ms-option .box svg {
+  width: 9px;
+  height: 9px;
+  color: var(--accent-contrast);
+  stroke-dasharray: 14;
+  stroke-dashoffset: 14;
+  transition: stroke-dashoffset var(--base) var(--ease-out);
+}
+.ms-option:has(input:checked) .box { background: var(--accent); border-color: var(--accent); }
+.ms-option:has(input:checked) .box svg { stroke-dashoffset: 0; }
+
 .filter.actions {
   flex-direction: row;
   align-items: center;

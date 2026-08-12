@@ -120,7 +120,10 @@ def derive_case_columns(cases: pd.DataFrame, holidays: pd.DataFrame,
 
     # SME vs everything else.
     df["product_category_label"] = (
-        df["product_category"].eq("SME").map({True: "SME", False: "Other"})
+        df["product_category"]
+        .astype("string")
+        .str.strip()
+        .replace("", pd.NA)
     )
 
     # Warrant cases — derived, since the source has no warrant column.

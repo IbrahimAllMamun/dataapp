@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import MultiSelect from "./MultiSelect.jsx";
 import { CheckIcon, CloseIcon, SearchIcon } from "./icons.jsx";
 
 /**
@@ -119,31 +120,19 @@ export default function Filters({ suit, value, onChange, onClear, total }) {
       </div>
 
       <div className="filter-row">
-        <fieldset className="filter checks">
-          <legend>Product Category</legend>
-          {products.map((p) => (
-            <Chip
-              key={p}
-              checked={value.products.includes(p)}
-              onChange={() => set({ products: toggleIn(value.products, p) })}
-            >
-              {p}
-            </Chip>
-          ))}
-        </fieldset>
+        <MultiSelect
+          label="Product Category"
+          options={products}
+          selected={value.products}
+          onToggle={(p) => set({ products: toggleIn(value.products, p) })}
+        />
 
-        <fieldset className="filter checks">
-          <legend>Litigation Status</legend>
-          {options.statuses.map((s) => (
-            <Chip
-              key={s}
-              checked={value.statuses.includes(s)}
-              onChange={() => set({ statuses: toggleIn(value.statuses, s) })}
-            >
-              {s}
-            </Chip>
-          ))}
-        </fieldset>
+        <MultiSelect
+          label="Litigation Status"
+          options={options.statuses}
+          selected={value.statuses}
+          onToggle={(s) => set({ statuses: toggleIn(value.statuses, s) })}
+        />
 
         <fieldset className="filter checks">
           <legend>Warrant</legend>
