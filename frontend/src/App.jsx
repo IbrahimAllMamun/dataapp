@@ -19,11 +19,13 @@ import {
   SunIcon,
 } from "./icons.jsx";
 
-// Tab label -> the exact `nature_of_suit` value stored in litigation_cases.
+// Tab label -> the `suit_type` value derived in derive.py (SUIT_TYPES), not the
+// raw nature_of_suit. "Others" covers several source values at once.
 const TABS = [
-  { key: "NI", suit: "Negotiable Instrument Act (NI Act)" },
-  { key: "ARA", suit: "Artha Rin Aine (ARA)" },
-  { key: "ARAE", suit: "Artha Rin Aine Execution (ARAE)" },
+  { key: "NI", suit: "NI Act" },
+  { key: "ARA", suit: "ARA" },
+  { key: "ARAE", suit: "ARAE" },
+  { key: "Others", suit: "Others" },
 ];
 
 const PAGE_SIZES = [25, 50, 100, 200];

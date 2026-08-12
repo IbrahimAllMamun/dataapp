@@ -119,9 +119,17 @@
 
 html { -webkit-text-size-adjust: 100%; }
 
+/* The shell is exactly one viewport tall and never scrolls as a page — the
+   table and the filter card scroll inside their own panes instead. */
+html,
+body,
+#root {
+  height: 100%;
+}
+
 body {
   margin: 0;
-  min-height: 100vh;
+  overflow: hidden;
   font-family: var(--font);
   font-size: 14px;
   line-height: 1.5;
@@ -196,40 +204,54 @@ body::before {
   --gutter: 22px;
 }
 
-.wrap {
-  max-width: 1460px;
-  margin: 0 auto;
-  padding: var(--gutter) 24px 64px;
-  /* Deliberately NOT animated. An opacity animation with fill-mode `both`
-     leaves this element composited, which establishes a stacking context and
-     traps the filter drawer's z-index below the sticky top bar — no z-index on
-     the drawer can escape it. The sidebar, title and panel animate themselves. */
+/* Column shell: the bar keeps its height, everything else divides the rest.
+   dvh so a mobile URL bar cannot push the pager off-screen. */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
 }
 
-/* Sidebar + content. minmax(0,1fr) lets the table scroll inside its column
-   instead of forcing the grid wider than the viewport. */
+.wrap {
+  flex: 1;
+  /* Without this the wrap grows to fit the table and the page overflows —
+     a flex item's automatic minimum size is its content, not zero. Same
+     reason for every other min-height/min-width: 0 below. */
+  min-height: 0;
+  display: flex;
+  width: 100%;
+  max-width: 1460px;
+  margin: 0 auto;
+  padding: var(--gutter) 24px;
+  /* Deliberately NOT animated. An opacity animation with fill-mode `both`
+     leaves this element composited, which establishes a stacking context and
+     traps the filter drawer's z-index below the top bar — no z-index on the
+     drawer can escape it. The sidebar and panel animate themselves. */
+}
+
+/* Sidebar + content, both stretched to the full height of the row. */
 .layout {
+  flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
   gap: var(--gutter);
-  align-items: start;
+  align-items: stretch;
 }
 
-.content { min-width: 0; }
-
-.content-title {
-  margin: 2px 0 14px;
-  font-size: 1rem;
-  font-weight: 640;
-  letter-spacing: -0.015em;
-  color: var(--text-2);
-  animation: rise var(--slow) var(--ease-out) both;
+.content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
 }
 
 /* --------------------------------------------------------------- top bar */
 .topbar {
-  position: sticky;
-  top: 0;
+  /* A flex item that never scrolls away, so it no longer needs to be sticky. */
+  flex-shrink: 0;
   z-index: 30;
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--surface) 82%, transparent);
@@ -282,12 +304,11 @@ body::before {
 
 /* --------------------------------------------------------------- sidebar */
 .sidebar {
-  position: sticky;
-  top: calc(var(--topbar-h) + var(--gutter));
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-width: 0;
+  min-height: 0;
   animation: rise var(--slow) var(--ease-out) both;
 }
 
@@ -296,8 +317,15 @@ body::before {
 
 .drawer-backdrop { display: none; }
 
-/* The filter card fills the sidebar column and stacks vertically. */
-.sidebar .filters { margin-bottom: 0; }
+/* The filter card fills the sidebar column and stacks vertically. It takes the
+   full height so it squares off against the table panel, and scrolls itself if
+   the controls ever outgrow the viewport. */
+.sidebar .filters {
+  flex: 1;
+  min-height: 0;
+  margin-bottom: 0;
+  overflow-y: auto;
+}
 .sidebar .filter-row { flex-direction: column; align-items: stretch; gap: 13px; }
 .sidebar .filter { width: 100%; }
 /* .filter.grow is `flex: 1 1 240px` for the horizontal bar. Once the row is a
@@ -419,7 +447,12 @@ body::before {
 .tab.active { color: var(--accent-contrast); }
 
 /* ------------------------------------------------------------------ panel */
+/* Fills the content column; the rows scroll, the pager stays pinned. */
 .panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--line);
   border-radius: var(--r-xl);
   background: var(--surface);
@@ -430,10 +463,17 @@ body::before {
 }
 
 .table-scroll {
+  flex: 1;
+  /* The height now comes from the panel, not from a viewport calculation. */
+  min-height: 0;
   overflow: auto;
-  max-height: clamp(340px, calc(100vh - 340px), 880px);
   overscroll-behavior: contain;
 }
+
+.loadbar,
+.pager { flex-shrink: 0; }
+
+.error { flex-shrink: 0; }
 
 table { width: 100%; border-collapse: separate; border-spacing: 0; }
 
@@ -1069,8 +1109,16 @@ table.inner tbody tr:hover td { background: var(--surface-2); }
   }
   .sidebar.open { transform: none; box-shadow: var(--shadow-lg); }
 
-  /* Off-canvas, the panel is the drawer — its own border would double up. */
-  .sidebar .filters { border: none; box-shadow: none; padding: 0; }
+  /* Off-canvas, the panel is the drawer — its own border would double up.
+     The drawer is the scroll container here, so the card must not be a second
+     one nested inside it. */
+  .sidebar .filters {
+    flex: 0 0 auto;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    overflow-y: visible;
+  }
 
   .sidebar-head {
     display: flex;
@@ -1102,7 +1150,7 @@ table.inner tbody tr:hover td { background: var(--surface-2); }
 }
 
 @media (max-width: 720px) {
-  .wrap { padding: 16px 14px 48px; }
+  .wrap { padding: 14px; }
 
   /* Brand and actions share the first row; the tabs take the second. */
   .topbar-inner {
@@ -1122,8 +1170,8 @@ table.inner tbody tr:hover td { background: var(--surface-2); }
   .filter.actions { width: 100%; justify-content: space-between; margin-left: 0; }
   fieldset.checks { width: 100%; flex-wrap: wrap; }
   .pager { justify-content: center; }
-  .table-scroll { max-height: none; }
-  th { position: static; }
+  /* The table scrolls inside the panel at every width now, so the header can
+     stay sticky here too — it used to be released because the page scrolled. */
 
   /* Touch targets reach 44px on small screens; desktop keeps the dense sizing. */
   .icon-btn { width: 44px; height: 44px; }

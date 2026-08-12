@@ -19,7 +19,10 @@ def build_filters(suit=None, branch=None, upcoming=None, products=None,
     where, params = [], {}
 
     if suit:
-        where.append("nature_of_suit = :suit")
+        # suit_type, not nature_of_suit: the Others tab is three source values
+        # ("420", "Bankruptcy Act (BA)", "Other") collapsed by SUIT_TYPES, which
+        # a single equality on the raw column cannot express.
+        where.append("suit_type = :suit")
         params["suit"] = suit
 
     if branch and branch != "All":

@@ -30,7 +30,18 @@ query_cases = """
       l.[Nature of Suit],
       l.CIF,
       l.[Present Case Status],
-      l.Aging,
+      COALESCE(
+        CASE
+            WHEN l.[Suit Filing Date] = '1900-01-01' THEN NULL
+            WHEN l.[Suit Filing Date] > l.[Last Hearing Date] THEN l.Aging
+            WHEN l.[Suit Filing Date] > l.[Last Hearing Date] THEN NULL
+            WHEN l.litigationstatus = 'Active'
+                THEN DATEDIFF(day, CAST(l.[Suit Filing Date] AS date), CAST(GETDATE() AS date))
+            WHEN l.litigationstatus = 'InActive'
+                THEN DATEDIFF(day, CAST(l.[Suit Filing Date] AS date), CAST(l.[Last Hearing Date] AS date))
+            ELSE NULL
+        END, 0
+    ) AS Aging,
       NULLIF(l.[Suit Filing Date], '') AS [Suit Filing Date],
       NULLIF(l.[Suit Value], '') AS [Suit Value],
       NULLIF(l.[Law Firm], '') AS [Law Firm],
@@ -167,7 +178,8 @@ def run_sync():
         # These back the API's filters: /api/cases (nature_of_suit), /api/case
         # (caseid on both tables), and the ORDER BY on cif/caseid.
         conn.execute(text("CREATE INDEX ix_cases_caseid   ON litigation_cases   (caseid)"))
-        conn.execute(text("CREATE INDEX ix_cases_suit_cif  ON litigation_cases   (nature_of_suit, cif, caseid)"))
+        # suit_type, matching what /api/cases actually filters on.
+        conn.execute(text("CREATE INDEX ix_cases_suit_cif  ON litigation_cases   (suit_type, cif, caseid)"))
         conn.execute(text("CREATE INDEX ix_hist_caseid     ON litigation_history (caseid)"))
         # Filter columns used by /api/cases.
         conn.execute(text("CREATE INDEX ix_cases_branch    ON litigation_cases (branch)"))
