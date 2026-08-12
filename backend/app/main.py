@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
 
     scheduler.add_job(
         run_sync_async,
-        CronTrigger(hour=10, minute=38),
+        CronTrigger(hour=13, minute=15),  # 06:00 Dhaka time
         id="daily_sync",
         max_instances=1,
         coalesce=True,
