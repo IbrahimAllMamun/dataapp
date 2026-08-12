@@ -95,11 +95,21 @@ query_history = """
 """
 
 query_holidays = "SELECT [Serial], [Date], [Day], [Holiday] FROM [SME].[Holiday]"
+query_updated = """
+    SELECT 
+        GETDATE() AS [GetDate],
+        CURRENT_TIMESTAMP AS [CurrentTimestamp],
+        SYSDATETIME() AS [SysDateTime],
+        GETUTCDATE() AS [GetUtcDate],
+        SYSUTCDATETIME() AS [SysUtcDateTime],
+        SYSDATETIMEOFFSET() AS [SysDateTimeOffset];
+"""
 
 SYNC_JOBS = [
     ("litigation_cases",   query_cases),
     ("litigation_history", query_history),
     ("holidays",           query_holidays),
+    ("updated",            query_updated),
 ]
 
 
@@ -121,7 +131,7 @@ def run_sync():
     transaction so the DB is never left empty or half-loaded."""
     started = datetime.now()
     log.info("sync started")
-    log.info("sync fucking started")
+    log.info("sync literally started")
 
     # 1. Extract everything FIRST. If a MSSQL read fails, Postgres is untouched.
     frames = {}

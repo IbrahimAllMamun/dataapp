@@ -1,12 +1,15 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import text
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 from .database import engine
 from .sync import run_sync
@@ -14,7 +17,14 @@ from .filters import build_filters, where_clause
 
 log = logging.getLogger("api")
 
-scheduler = AsyncIOScheduler(timezone="Asia/Dhaka")
+DHAKA = ZoneInfo("Asia/Dhaka")
+
+scheduler = AsyncIOScheduler(timezone=DHAKA)
+
+# Three things can start a sync: boot, the daily job, and the hourly catch-up.
+# sync.py drops and recreates every table, so two overlapping runs would race on
+# the same DROP — this lock is what keeps that from being possible.
+_sync_lock = asyncio.Lock()
 
 
 # create_task() must be kept alive by a strong reference — the event loop only
@@ -24,13 +34,60 @@ _boot_sync: asyncio.Task | None = None
 
 async def run_sync_async():
     """Run the blocking sync in a threadpool so it never blocks the event loop."""
+    if _sync_lock.locked():
+        log.info("a sync is already running — skipping this trigger")
+        return
+
+    async with _sync_lock:
+        try:
+            await asyncio.to_thread(run_sync)
+        except Exception:
+            # Without this the failure is invisible: sync.main()'s handler only
+            # covers `python -m app.sync`, so on this path the exception just
+            # parks on the Task until garbage collection, if it is ever
+            # reported at all.
+            log.exception("sync FAILED — Postgres left unchanged")
+
+
+def _warehouse_report_date():
+    """The report date currently loaded in Postgres, or None if unreadable.
+
+    Blocking — call it through asyncio.to_thread.
+    """
+    with engine.connect() as conn:
+        latest = conn.execute(
+            text("SELECT MAX(reportpreparationdate) FROM litigation_cases")
+        ).scalar()
+
+    if latest is None:
+        return None
+    # The column is a timestamp, but tolerate a plain date too.
+    return latest.date() if hasattr(latest, "date") else latest
+
+
+async def catch_up_if_stale():
+    """Hourly: sync when the warehouse is not already on today's report.
+
+    The daily job only fires if the process happens to be running at that
+    minute. This is the safety net for the container being down then — it
+    reaches today's data within the hour and is a cheap no-op once current.
+    """
     try:
-        await asyncio.to_thread(run_sync)
+        loaded = await asyncio.to_thread(_warehouse_report_date)
     except Exception:
-        # Without this the failure is invisible: sync.main()'s handler only
-        # covers `python -m app.sync`, so on this path the exception just parks
-        # on the Task until garbage collection, if it is ever reported at all.
-        log.exception("sync FAILED — Postgres left unchanged")
+        # An unreadable warehouse is usually an empty or half-built one, which
+        # is exactly when a sync is wanted — but say so rather than sync blind.
+        log.exception("could not read the warehouse report date; skipping catch-up")
+        return
+
+    today = datetime.now(DHAKA).date()
+
+    if loaded == today:
+        log.info("warehouse already on today's report (%s) — no sync needed", loaded)
+        return
+
+    log.info("warehouse report date is %s, today is %s — syncing", loaded, today)
+    await run_sync_async()
 
 
 @asynccontextmanager
@@ -39,12 +96,29 @@ async def lifespan(app: FastAPI):
 
     scheduler.add_job(
         run_sync_async,
-        CronTrigger(hour=13, minute=15),  # 06:00 Dhaka time
+        CronTrigger(hour=15, minute=20, second=0),  # 09:20 UTC = 15:20 Dhaka
         id="daily_sync",
         max_instances=1,
         coalesce=True,
         replace_existing=True,
+        # APScheduler defaults this to 1 second: a job even a moment late is
+        # dropped with only a "run time was missed" line. A sync holds a thread
+        # for minutes, so that default silently skips runs.
+        misfire_grace_time=3600,
     )
+
+    # Safety net for the daily job, which cannot fire while the container is
+    # down. First run is one hour after start — boot has just synced.
+    scheduler.add_job(
+        catch_up_if_stale,
+        IntervalTrigger(hours=1),
+        id="hourly_catch_up",
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
+        misfire_grace_time=1800,
+    )
+
     scheduler.start()
     # Seed once on boot so the API isn't querying empty tables until 6am.
     # NOTE: uvicorn runs with --reload and backend/app is bind-mounted, so every
@@ -262,26 +336,6 @@ def get_reportdate():
     sync.py filters the source on its MAX(ReportPreparationDate), so every row
     carries the same value; MAX keeps this deterministic anyway if a partial
     sync ever leaves more than one behind.
-    """
-    try:
-        with engine.connect() as conn:
-            reportdate = conn.execute(
-                text("SELECT MAX(reportpreparationdate) FROM litigation_cases")
-            ).scalar()
-    except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Data not ready: {e}")
-
-    return {"reportdate": reportdate}
-
-
-@app.get("/api/summary")
-def get_summary():
-    """
-    Summary counts of cases by status, product, and branch. The frontend uses
-    these to populate the dashboard's summary cards and pie charts. The counts
-    are scoped to the current suit filter, so the user sees only the relevant
-    breakdowns for the selected suit. The SQL query aggregates the counts and
-    returns them in a structured format for easy consumption by the frontend.
     """
     try:
         with engine.connect() as conn:

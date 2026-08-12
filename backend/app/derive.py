@@ -15,7 +15,12 @@ SUIT_TYPES = {
     "Negotiable Instrument Act (NI Act)": "NI Act",
     "Artha Rin Aine (ARA)": "ARA",
     "Artha Rin Aine Execution (ARAE)": "ARAE",
+    "420": "Others",
+    "Bankruptcy Act (BA)": "Others",
+    "Other": "Others"
 }
+
+
 
 # ---------------------------------------------------------------------------
 # Procedural (not alphabetical) status ordering, per suit type.
@@ -27,6 +32,7 @@ STATUS_ORDER = {
     "NI Act": [],
     "ARA": [],
     "ARAE": [],
+    "Others": [],
 }
 
 # Bangladesh working week is Sunday–Thursday; Friday(4)/Saturday(5) are weekend
