@@ -612,7 +612,9 @@ table.summary td.num { font-family: var(--mono); font-size: 0.78125rem; }
 .list-modal .pager { border-top: 1px solid var(--line); }
 
 /* avg over (min, max) — the range is the point, so it gets its own line. */
-.aging { display: inline-flex; flex-direction: column; align-items: flex-end; line-height: 1.25; }
+.aging { display: inline-flex; flex-direction: column; align-items: center; line-height: 1.25; }
+.aging-col { text-align: center; }
+
 .aging-avg { color: var(--text); font-weight: 620; }
 .aging-range { font-size: 0.6875rem; color: var(--text-3); }
 .aging-range .lo { color: var(--ok-fg); font-weight: 620; }
@@ -1277,3 +1279,5 @@ table.inner tbody tr:hover td { background: var(--surface-2); }
     scroll-behavior: auto !important;
   }
 }
+
+

@@ -23,6 +23,17 @@ function AgingCell({ avg, min, max }) {
     </span>
   );
 }
+function AgingHeadCell() {
+  return (
+    <span className="aging">
+      <span className="aging-avg">{"avg"}</span>
+      <span className="aging-range">
+        (<span className="lo">{"min"}</span>,{" "}
+        <span className="hi">{"max"}</span>)
+      </span>
+    </span>
+  );
+}
 
 const COLS = 6; // value columns, excluding Group
 
@@ -121,8 +132,17 @@ export default function Summary({ data, loading, filters, onDrill }) {
               <th className="num">Suit Value</th>
               <th className="num">Receivable</th>
               <th className="num">Overdue</th>
-              <th className="num">Case Aging</th>
-              <th className="num">Since Last Hearing</th>
+              <th className="num aging-col">Aging</th>
+              <th className="num aging-col">Status Duration</th>
+            </tr>
+            <tr>
+              <th className="grp"></th>
+              <th className="num"></th>
+              <th className="num"></th>
+              <th className="num"></th>
+              <th className="num"></th>
+              <th className="num aging-col"><AgingHeadCell/></th>
+              <th className="num aging-col"><AgingHeadCell/></th>
             </tr>
           </thead>
           <tbody ref={bodyRef}>
@@ -182,10 +202,10 @@ export default function Summary({ data, loading, filters, onDrill }) {
                   <td className="num">{num(r.total_suit_value)}</td>
                   <td className="num">{num(r.total_receivable)}</td>
                   <td className="num">{num(r.total_overdue)}</td>
-                  <td className="num">
+                  <td className="num aging-col">
                     <AgingCell avg={r.avg_aging} min={r.min_aging} max={r.max_aging} />
                   </td>
-                  <td className="num">
+                  <td className="num aging-col">
                     <AgingCell
                       avg={r.avg_aging_status}
                       min={r.min_aging_status}
