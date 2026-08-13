@@ -73,3 +73,36 @@ def build_filters(suit=None, branch=None, upcoming=None, products=None,
 
 def where_clause(conditions):
     return ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+
+# error_cases is loaded straight from the source: derive_case_columns() runs on
+# litigation_cases only, so none of suit_type / product_category_label /
+# upcoming / is_warrant / status_rank exist on it. build_filters() emits those
+# column names, so it cannot be reused here — this builds the subset that the
+# error table can actually answer.
+ERROR_TYPES = [
+    "No Suit Filing Date",
+    "Suit Filing Date After Current Date",
+    "Suit Filing Date After Last Hearing Date",
+]
+
+
+def build_error_filters(branch=None, products=None, error_type=None):
+    """Return (list_of_sql_conditions, params_dict) for error_cases."""
+    where, params = [], {}
+
+    if branch and branch != "All":
+        where.append("branch = :branch")
+        params["branch"] = branch
+
+    if products:
+        # The raw source column, not the derived label — and trimmed, since the
+        # source is fixed-width CHAR.
+        where.append("TRIM(product_category) = ANY(:products)")
+        params["products"] = list(products)
+
+    if error_type:
+        where.append("error_type = :error_type")
+        params["error_type"] = error_type
+
+    return where, params

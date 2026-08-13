@@ -13,7 +13,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from .database import engine
 from .sync import run_sync
-from .filters import build_filters, where_clause
+from .filters import build_filters, build_error_filters, where_clause, ERROR_TYPES
 
 log = logging.getLogger("api")
 
@@ -96,7 +96,7 @@ async def lifespan(app: FastAPI):
 
     scheduler.add_job(
         run_sync_async,
-        CronTrigger(hour=15, minute=55, second=0),  # 09:20 UTC = 15:20 Dhaka
+        CronTrigger(hour=10, minute=20, second=0),  # 09:20 UTC = 15:20 Dhaka
         id="daily_sync",
         max_instances=1,
         coalesce=True,
@@ -240,6 +240,9 @@ def get_cases(
                     SELECT cif, clientname, accountnumber, caseid, branch, litigationstatus
                     FROM litigation_cases
                     {wc}
+                    AND suit_filing_date IS NOT NULL
+                    AND suit_filing_date <= last_hearing_date
+                    AND suit_filing_date <= CURRENT_DATE
                     ORDER BY suit_filing_date DESC, status_rank, cif, caseid
                     LIMIT :limit OFFSET :offset
                 """),
@@ -377,6 +380,9 @@ def get_summary(
                             LIMIT 1) AS aging_status
                     FROM litigation_cases c
                     {wc} 
+                    AND suit_filing_date IS NOT NULL
+                    AND suit_filing_date <= last_hearing_date
+                    AND suit_filing_date <= CURRENT_DATE
                     )
                     SELECT
                         CASE
@@ -416,15 +422,53 @@ def get_summary(
 
 
 
+# Fixed order, matching the CASE in sync.query_error_cases, so an error type
+# with no rows today still keeps its place tomorrow.
+_ERROR_ORDER = " ".join(
+    f"WHEN '{t}' THEN {i}" for i, t in enumerate(ERROR_TYPES)
+)
+
+
+@app.get("/api/error_summary")
+def get_error_summary(
+    branch: str | None = Query(None),
+    products: list[str] | None = Query(None),
+):
+    """One row per error type with its case count."""
+    where, params = build_error_filters(branch=branch, products=products)
+    wc = where_clause(where)
+
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text(f"""
+                SELECT error_type, COUNT(*) AS cases
+                FROM error_cases
+                {wc}
+                GROUP BY error_type
+                ORDER BY CASE error_type {_ERROR_ORDER} ELSE 99 END
+            """), params)
+            columns, rows = _rows(result)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Data not ready: {e}")
+
+    return {"columns": columns, "rows": rows}
+
+
 @app.get("/api/error_cases")
 def get_error_cases(
     branch: str | None = Query(None),
+    products: list[str] | None = Query(None),
+    error_type: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=1500),
 ):
+    """The cases behind one error type."""
     offset = (page - 1) * page_size
-    where, params = build_filters(branch=branch)
+    where, params = build_error_filters(
+        branch=branch, products=products, error_type=error_type
+    )
     wc = where_clause(where)
+
     try:
         with engine.connect() as conn:
             # COUNT uses the SAME filters as the page query, or total_pages lies.
@@ -434,10 +478,18 @@ def get_error_cases(
 
             result = conn.execute(
                 text(f"""
-                    SELECT error_type, cif, clientname, accountnumber, caseid, branch, litigationstatus
-                    FROM error_cases
+                    WITH cases AS (
+                        SELECT e.error_type, l.cif, l.clientname, l.accountnumber, e.caseid,
+                                e.branch, l.litigationstatus, e.product_category
+                        FROM error_cases e
+                        LEFT JOIN litigation_cases l
+                            ON e.caseid = l.caseid
+                    )
+                    SELECT error_type, cif, l.clientname, accountnumber, caseid,
+                            branch, litigationstatus
+                    FROM cases
                     {wc}
-                    ORDER BY status_rank, cif, caseid
+                    ORDER BY cif, caseid
                     LIMIT :limit OFFSET :offset
                 """),
                 {**params, "limit": page_size, "offset": offset},

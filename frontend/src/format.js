@@ -13,6 +13,8 @@ export const LABELS = {
   plaintiff: "Plaintiff",
   plaintiffcif: "Plaintiff CIF",
   next_hearing_date: "Next Hearing Date",
+  last_hearing_date: "Last Hearing Date",
+  error_type: "Error Type",
   cheque_number: "Cheque Number",
   litigation_receivable: "Receivable",
   aging: "Aging",

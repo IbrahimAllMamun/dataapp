@@ -67,7 +67,10 @@ export default function Summary({ data, loading, filters, onDrill }) {
       // `top: 0` on both would stack them in the same place.
       const table = body.parentElement;
       const sticky = [
-        ...(table?.querySelectorAll("thead tr") ?? []),
+        // :scope > thead — a bare "thead tr" also matches the nested
+        // case table inside an expanded row, which would take a slot in the
+        // chain and push every row below it down by its height.
+        ...(table?.querySelectorAll(":scope > thead > tr") ?? []),
         ...body.querySelectorAll("tr.sticky-row"),
       ];
 

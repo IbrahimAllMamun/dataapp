@@ -4,6 +4,7 @@ import Filters from "./Filters.jsx";
 import NameCell from "./NameCell.jsx";
 import Summary from "./Summary.jsx";
 import CaseListModal from "./CaseListModal.jsx";
+import Errors from "./Errors.jsx";
 import {
   LABELS,
   formatCell,
@@ -30,6 +31,8 @@ const TABS = [
   { key: "ARA", suit: "ARA" },
   { key: "ARAE", suit: "ARAE" },
   { key: "Others", suit: "Others" },
+  // Data-quality exceptions, not a suit.
+  { key: "Errors", errors: true },
 ];
 
 const PAGE_SIZES = [25, 50, 100, 200];
@@ -119,6 +122,33 @@ export default function App() {
 
     // The summary spans every suit and aggregates, so it takes neither the
     // suit nor the paging, and drops the two per-case filters.
+    if (tab.errors) {
+      const eq = new URLSearchParams();
+      if (filters.branch && filters.branch !== "All")
+        eq.set("branch", filters.branch);
+      filters.products.forEach((p) => eq.append("products", p));
+
+      fetch(`/api/error_summary?${eq}`, { signal: ctrl.signal })
+        .then(async (res) => {
+          const body = await res.json().catch(() => null);
+          if (!res.ok)
+            throw new Error(body?.detail || `Request failed (${res.status})`);
+          return body;
+        })
+        .then((body) => {
+          setData(body);
+          setLoading(false);
+        })
+        .catch((err) => {
+          if (err.name === "AbortError") return;
+          setError(err.message);
+          setData(null);
+          setLoading(false);
+        });
+
+      return () => ctrl.abort();
+    }
+
     if (tab.summary) {
       const sq = new URLSearchParams();
       if (filters.branch && filters.branch !== "All")
@@ -349,10 +379,20 @@ export default function App() {
               value={filters}
               onChange={changeFilters}
               onClear={clearFilters}
-              total={tab.summary ? undefined : data?.total}
-              // The search and the warrant flag single out individual cases,
-              // which the aggregate view has no use for.
-              perCase={!tab.summary}
+              total={tab.summary || tab.errors ? undefined : data?.total}
+              // Each tab asks only for the controls it can actually apply.
+              show={
+                tab.errors
+                  ? {
+                      upcoming: false,
+                      search: false,
+                      statuses: false,
+                      warrant: false,
+                    }
+                  : tab.summary
+                    ? { search: false, warrant: false }
+                    : undefined
+              }
             />
           </aside>
 
@@ -366,6 +406,15 @@ export default function App() {
               </div>
             )}
 
+            {!error && tab.errors && (
+              <Errors
+                data={data}
+                loading={loading}
+                filters={filters}
+                onPick={(caseid) => setOpenCaseId(caseid)}
+              />
+            )}
+
             {!error && tab.summary && (
               <Summary
                 data={data}
@@ -375,7 +424,7 @@ export default function App() {
               />
             )}
 
-            {!error && !tab.summary && (
+            {!error && !tab.summary && !tab.errors && (
               <div className="panel">
                 {refreshing && (
                   <div className="loadbar" role="status" aria-label="Loading" />

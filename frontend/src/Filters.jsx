@@ -24,14 +24,25 @@ function Chip({ checked, onChange, children }) {
   );
 }
 
+/** Which controls a tab wants. Anything omitted defaults to shown. */
+const ALL = {
+  branch: true,
+  upcoming: true,
+  search: true,
+  products: true,
+  statuses: true,
+  warrant: true,
+};
+
 export default function Filters({
   suit,
   value,
   onChange,
   onClear,
   total,
-  perCase = true,
+  show: showProp,
 }) {
+  const show = { ...ALL, ...showProp };
   const [options, setOptions] = useState(null);
   const [term, setTerm] = useState(value.q ?? "");
 
@@ -87,37 +98,41 @@ export default function Filters({
   return (
     <div className="filters">
       <div className="filter-row">
-        <label className="filter">
-          <span>Branch</span>
-          <select
-            value={value.branch}
-            onChange={(e) => set({ branch: e.target.value })}
-          >
-            <option value="All">All</option>
-            {options.branches.map((b) => (
-              <option key={b} value={b}>
-                {b}
-              </option>
-            ))}
-          </select>
-        </label>
+        {show.branch && (
+          <label className="filter">
+            <span>Branch</span>
+            <select
+              value={value.branch}
+              onChange={(e) => set({ branch: e.target.value })}
+            >
+              <option value="All">All</option>
+              {options.branches.map((b) => (
+                <option key={b} value={b}>
+                  {b}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
-        <label className="filter">
-          <span>Upcoming Hearing</span>
-          <select
-            value={value.upcoming}
-            onChange={(e) => set({ upcoming: e.target.value })}
-          >
-            <option value="All">All</option>
-            {options.upcoming.map((u) => (
-              <option key={u} value={u}>
-                {u}
-              </option>
-            ))}
-          </select>
-        </label>
+        {show.upcoming && (
+          <label className="filter">
+            <span>Upcoming Hearing</span>
+            <select
+              value={value.upcoming}
+              onChange={(e) => set({ upcoming: e.target.value })}
+            >
+              <option value="All">All</option>
+              {options.upcoming.map((u) => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
-        {perCase && (
+        {show.search && (
           <label className="filter grow">
             <span>Search client / CIF / account</span>
             <div className="search-wrap">
@@ -144,21 +159,25 @@ export default function Filters({
       </div>
 
       <div className="filter-row">
-        <MultiSelect
-          label="Product Category"
-          options={products}
-          selected={value.products}
-          onToggle={(p) => set({ products: toggleIn(value.products, p) })}
-        />
+        {show.products && (
+          <MultiSelect
+            label="Product Category"
+            options={products}
+            selected={value.products}
+            onToggle={(p) => set({ products: toggleIn(value.products, p) })}
+          />
+        )}
 
-        <MultiSelect
-          label="Litigation Status"
-          options={options.statuses}
-          selected={value.statuses}
-          onToggle={(s) => set({ statuses: toggleIn(value.statuses, s) })}
-        />
+        {show.statuses && (
+          <MultiSelect
+            label="Litigation Status"
+            options={options.statuses}
+            selected={value.statuses}
+            onToggle={(s) => set({ statuses: toggleIn(value.statuses, s) })}
+          />
+        )}
 
-        {perCase && (
+        {show.warrant && (
           <fieldset className="filter checks">
             <legend>Warrant</legend>
             <Chip

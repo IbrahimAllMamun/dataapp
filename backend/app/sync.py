@@ -62,7 +62,6 @@ query_cases = """
       [ReportPreparationDate]
     FROM [dbo].[AnalyticsLitigationAccount] l
     WHERE [ReportPreparationDate] = (SELECT MAX([ReportPreparationDate]) FROM [dbo].[AnalyticsLitigationAccount])
-    AND [Suit Filing Date] <> '1900-01-01'
 
   )
 
@@ -115,8 +114,6 @@ query_cases = """
         ON a.ACCOUNT_NUMBER = l.AccountNumber
     LEFT JOIN latest_portfolio p
         ON p.ACCOUNT_NUMBER = l.AccountNumber
-    WHERE [Suit Filing Date] <= [Last Hearing Date]
-    AND [Suit Filing Date] <= GETDATE()
 """
 
 query_history = """
@@ -177,106 +174,22 @@ query_updated = """
         SYSDATETIMEOFFSET() AS [SysDateTimeOffset];
 """
 query_error_cases = """
-  WITH latest_portfolio AS (
-    SELECT ACCOUNT_NUMBER, MONTHSOVERDUE
-    FROM SME.Portfolio
-    WHERE [Month] = (SELECT MAX([Month]) FROM SME.Portfolio)
-  ),
-  all_cases AS (
-    SELECT 
-      AccountNumber,
-      ClientName,
+    SELECT
       CaseID,
       Branch,
-      LitigationStatus,
-      [Nature of Suit],
-      CIF,
-      COALESCE(
-        [Present Case Status],
-        (SELECT TOP 1 CaseStatus
-         FROM [dbo].[AnalyticsLitigationAccountHearing] h
-         WHERE h.caseid = l.CaseID
-         ORDER BY h.HearingDate DESC, h.MakeDate DESC)
-      ) AS [Present Case Status],
-      Aging,
-      NULLIF([Suit Filing Date], '') AS [Suit Filing Date],
-      NULLIF([Suit Value], '') AS [Suit Value],
-      NULLIF([Law Firm], '') AS [Law Firm],
-      NULLIF(NULLIF([Court No],'N/A'), '') AS [Court No],
-      NULLIF([Next Hearing Date], '') AS [Next Hearing Date],
-      COALESCE(
-        NULLIF([Last Hearing Date], ''),
-        (SELECT TOP 1 HearingDate
-         FROM [dbo].[AnalyticsLitigationAccountHearing] h
-         WHERE h.caseid = l.CaseID
-         ORDER BY h.HearingDate DESC, h.MakeDate DESC)
-      ) AS [Last Hearing Date],
-      NULLIF(NULLIF([Cheque Number], 'N/A'), '') AS [Cheque Number],
-      Plaintiff,
-      PlaintiffCIF,
-      NULLIF(Litigation_Receivable, '') AS Litigation_Receivable,
-      URPA,
-      OVERDUE_AMOUNT,
-      LPI,
-      NetExciseDutyTillLastYear,
-      NetExciseDutyTillCurrentYear,
       PRODUCT_CATEGORY,
-      [ReportPreparationDate]
-    FROM [dbo].[AnalyticsLitigationAccount] l
-    WHERE [ReportPreparationDate] = (SELECT MAX([ReportPreparationDate]) FROM [dbo].[AnalyticsLitigationAccount])
-  )
-
-  SELECT
-      l.AccountNumber,
-      l.ClientName,
-      l.CaseID,
-      l.Branch,
-      l.LitigationStatus,
-      l.[Nature of Suit],
-      l.CIF,
-      l.[Present Case Status],
-      l.Aging,
-      l.[Suit Filing Date],
-      l.[Suit Value],
-      l.[Law Firm],
-      l.[Court No],
-      l.[Next Hearing Date],
-      l.[Last Hearing Date],
-      l.[Cheque Number],
-      l.Plaintiff,
-      l.PlaintiffCIF,
-      l.Litigation_Receivable,
-      a.STMCode,
-      a.STMName,
-      a.RMCode,
-      a.RMName,
-      a.MonitorByCode,
-      a.MonitorBy,
-      l.URPA,
-      COALESCE(NULLIF(p.MONTHSOVERDUE, ''), NULLIF(a.MONTHSOVERDUE, '')) AS [MOD],
-      l.OVERDUE_AMOUNT,
-      a.PRINCIPAL_OD,
-      a.INTEREST_OD,
-      l.LPI,
-      l.NetExciseDutyTillLastYear,
-      l.NetExciseDutyTillCurrentYear,
-      l.PRODUCT_CATEGORY,
-      l.[ReportPreparationDate],
       CASE
-          WHEN l.[Suit Filing Date] IS NULL THEN 'No Suit Filing Date'
-          WHEN l.[Suit Filing Date] > GETDATE() THEN 'Suit Filing Date After Current Date'
-          WHEN l.[Suit Filing Date] > l.[Last Hearing Date] THEN 'Suit Filing Date After Last Hearing Date'
+          WHEN NULLIF([Suit Filing Date], '') IS NULL THEN 'No Suit Filing Date'
+          WHEN NULLIF([Suit Filing Date], '') > GETDATE() THEN 'Suit Filing Date After Current Date'
+          WHEN NULLIF([Suit Filing Date], '') > [Last Hearing Date] THEN 'Suit Filing Date After Last Hearing Date'
           ELSE NULL
       END
       AS error_type
-    FROM all_cases l
-    LEFT JOIN [dbo].[AnalyticsCLAccount] a
-        ON a.ACCOUNT_NUMBER = l.AccountNumber
-    LEFT JOIN latest_portfolio p
-        ON p.ACCOUNT_NUMBER = l.AccountNumber
-    WHERE [Suit Filing Date] IS NULL
-    OR [Suit Filing Date] > [Last Hearing Date]
-    OR [Suit Filing Date] > GETDATE()
+    FROM [dbo].[AnalyticsLitigationAccount]
+    WHERE [ReportPreparationDate] = (SELECT MAX([ReportPreparationDate]) FROM [dbo].[AnalyticsLitigationAccount])
+    AND (NULLIF([Suit Filing Date], '') IS NULL
+    OR NULLIF([Suit Filing Date], '') > [Last Hearing Date]
+    OR NULLIF([Suit Filing Date], '') > GETDATE())
 """
 
 SYNC_JOBS = [
