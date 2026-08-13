@@ -61,17 +61,25 @@ export default function Summary({ data, loading, filters, onDrill }) {
     if (!body) return;
 
     const stick = () => {
-      // The column header is sticky at 0, so the chain starts below it —
-      // otherwise the grand total parks on top of the header.
-      const head = body.parentElement?.querySelector("thead");
-      let offset = head ? head.getBoundingClientRect().height : 0;
+      // Every sticky row in document order: both header rows, then the grand
+      // total and the suit rows. They all share one running offset, so the
+      // subheader parks under the header rather than on top of it — a plain
+      // `top: 0` on both would stack them in the same place.
+      const table = body.parentElement;
+      const sticky = [
+        ...(table?.querySelectorAll("thead tr") ?? []),
+        ...body.querySelectorAll("tr.sticky-row"),
+      ];
 
-      for (const tr of body.querySelectorAll("tr.sticky-row")) {
-        // The sticky element is each <td>, not the <tr> — a table row cannot be
-        // a sticky container itself — so the offset travels down as a variable.
+      let offset = 0;
+      sticky.forEach((tr, i) => {
+        // The sticky element is each cell, not the <tr> — a table row cannot be
+        // a sticky container itself — so both values travel down as variables.
         tr.style.setProperty("--stick-top", `${offset}px`);
+        // Descending, so a row sliding up passes UNDER the ones already parked.
+        tr.style.setProperty("--stick-z", String(sticky.length - i));
         offset += tr.getBoundingClientRect().height;
-      }
+      });
     };
 
     stick();

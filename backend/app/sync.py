@@ -19,6 +19,51 @@ query_cases = """
     SELECT ACCOUNT_NUMBER, MONTHSOVERDUE
     FROM SME.Portfolio
     WHERE [Month] = (SELECT MAX([Month]) FROM SME.Portfolio)
+  ),
+  all_cases AS (
+    SELECT 
+      AccountNumber,
+      ClientName,
+      CaseID,
+      Branch,
+      LitigationStatus,
+      [Nature of Suit],
+      CIF,
+      COALESCE(
+        [Present Case Status],
+        (SELECT TOP 1 CaseStatus
+         FROM [dbo].[AnalyticsLitigationAccountHearing] h
+         WHERE h.caseid = l.CaseID
+         ORDER BY h.HearingDate DESC, h.MakeDate DESC)
+      ) AS [Present Case Status],
+      Aging,
+      NULLIF([Suit Filing Date], '') AS [Suit Filing Date],
+      NULLIF([Suit Value], '') AS [Suit Value],
+      NULLIF([Law Firm], '') AS [Law Firm],
+      NULLIF(NULLIF([Court No],'N/A'), '') AS [Court No],
+      NULLIF([Next Hearing Date], '') AS [Next Hearing Date],
+        COALESCE(
+        NULLIF([Last Hearing Date], ''),
+        (SELECT TOP 1 HearingDate
+         FROM [dbo].[AnalyticsLitigationAccountHearing] h
+         WHERE h.caseid = l.CaseID
+         ORDER BY h.HearingDate DESC, h.MakeDate DESC)
+      ) AS [Last Hearing Date],
+      NULLIF(NULLIF([Cheque Number], 'N/A'), '') AS [Cheque Number],
+      Plaintiff,
+      PlaintiffCIF,
+      NULLIF(Litigation_Receivable, '') AS Litigation_Receivable,
+      URPA,
+      OVERDUE_AMOUNT,
+      LPI,
+      NetExciseDutyTillLastYear,
+      NetExciseDutyTillCurrentYear,
+      PRODUCT_CATEGORY,
+      [ReportPreparationDate]
+    FROM [dbo].[AnalyticsLitigationAccount] l
+    WHERE [ReportPreparationDate] = (SELECT MAX([ReportPreparationDate]) FROM [dbo].[AnalyticsLitigationAccount])
+    AND [Suit Filing Date] <> '1900-01-01'
+
   )
 
   SELECT
@@ -32,26 +77,23 @@ query_cases = """
       l.[Present Case Status],
       COALESCE(
         CASE
-            WHEN l.[Suit Filing Date] = '1900-01-01' THEN NULL
-            WHEN l.[Suit Filing Date] > l.[Last Hearing Date] THEN l.Aging
-            WHEN l.[Suit Filing Date] > l.[Last Hearing Date] THEN NULL
             WHEN l.litigationstatus = 'Active'
                 THEN DATEDIFF(day, CAST(l.[Suit Filing Date] AS date), CAST(GETDATE() AS date))
             WHEN l.litigationstatus = 'InActive'
                 THEN DATEDIFF(day, CAST(l.[Suit Filing Date] AS date), CAST(l.[Last Hearing Date] AS date))
             ELSE NULL
-        END, 0
-    ) AS Aging,
-      NULLIF(l.[Suit Filing Date], '') AS [Suit Filing Date],
-      NULLIF(l.[Suit Value], '') AS [Suit Value],
-      NULLIF(l.[Law Firm], '') AS [Law Firm],
-      NULLIF(NULLIF(l.[Court No],'N/A'), '') AS [Court No],
-      NULLIF(l.[Next Hearing Date], '') AS [Next Hearing Date],
-      NULLIF(l.[Last Hearing Date], '') AS [Last Hearing Date],
-      NULLIF(NULLIF(l.[Cheque Number], 'N/A'), '') AS [Cheque Number],
+        END, Aging
+      ) AS Aging,
+      l.[Suit Filing Date],
+      l.[Suit Value],
+      l.[Law Firm],
+      l.[Court No],
+      l.[Next Hearing Date],
+      l.[Last Hearing Date],
+      l.[Cheque Number],
       l.Plaintiff,
       l.PlaintiffCIF,
-      NULLIF(l.Litigation_Receivable, '') AS Litigation_Receivable,
+      l.Litigation_Receivable,
       a.STMCode,
       a.STMName,
       a.RMCode,
@@ -68,14 +110,13 @@ query_cases = """
       l.NetExciseDutyTillCurrentYear,
       l.PRODUCT_CATEGORY,
       l.[ReportPreparationDate]
-    FROM [dbo].[AnalyticsLitigationAccount] l
+    FROM all_cases l
     LEFT JOIN [dbo].[AnalyticsCLAccount] a
         ON a.ACCOUNT_NUMBER = l.AccountNumber
     LEFT JOIN latest_portfolio p
         ON p.ACCOUNT_NUMBER = l.AccountNumber
-    WHERE l.[ReportPreparationDate] = (SELECT MAX([ReportPreparationDate]) FROM [dbo].[AnalyticsLitigationAccount])
-    AND l.[Suit Filing Date] <= l.[Last Hearing Date]
-    AND l.[Suit Filing Date] <= GETDATE()
+    WHERE [Suit Filing Date] <= [Last Hearing Date]
+    AND [Suit Filing Date] <= GETDATE()
 """
 
 query_history = """
@@ -135,11 +176,114 @@ query_updated = """
         SYSUTCDATETIME() AS [SysUtcDateTime],
         SYSDATETIMEOFFSET() AS [SysDateTimeOffset];
 """
+query_error_cases = """
+  WITH latest_portfolio AS (
+    SELECT ACCOUNT_NUMBER, MONTHSOVERDUE
+    FROM SME.Portfolio
+    WHERE [Month] = (SELECT MAX([Month]) FROM SME.Portfolio)
+  ),
+  all_cases AS (
+    SELECT 
+      AccountNumber,
+      ClientName,
+      CaseID,
+      Branch,
+      LitigationStatus,
+      [Nature of Suit],
+      CIF,
+      COALESCE(
+        [Present Case Status],
+        (SELECT TOP 1 CaseStatus
+         FROM [dbo].[AnalyticsLitigationAccountHearing] h
+         WHERE h.caseid = l.CaseID
+         ORDER BY h.HearingDate DESC, h.MakeDate DESC)
+      ) AS [Present Case Status],
+      Aging,
+      NULLIF([Suit Filing Date], '') AS [Suit Filing Date],
+      NULLIF([Suit Value], '') AS [Suit Value],
+      NULLIF([Law Firm], '') AS [Law Firm],
+      NULLIF(NULLIF([Court No],'N/A'), '') AS [Court No],
+      NULLIF([Next Hearing Date], '') AS [Next Hearing Date],
+      COALESCE(
+        NULLIF([Last Hearing Date], ''),
+        (SELECT TOP 1 HearingDate
+         FROM [dbo].[AnalyticsLitigationAccountHearing] h
+         WHERE h.caseid = l.CaseID
+         ORDER BY h.HearingDate DESC, h.MakeDate DESC)
+      ) AS [Last Hearing Date],
+      NULLIF(NULLIF([Cheque Number], 'N/A'), '') AS [Cheque Number],
+      Plaintiff,
+      PlaintiffCIF,
+      NULLIF(Litigation_Receivable, '') AS Litigation_Receivable,
+      URPA,
+      OVERDUE_AMOUNT,
+      LPI,
+      NetExciseDutyTillLastYear,
+      NetExciseDutyTillCurrentYear,
+      PRODUCT_CATEGORY,
+      [ReportPreparationDate]
+    FROM [dbo].[AnalyticsLitigationAccount] l
+    WHERE [ReportPreparationDate] = (SELECT MAX([ReportPreparationDate]) FROM [dbo].[AnalyticsLitigationAccount])
+  )
+
+  SELECT
+      l.AccountNumber,
+      l.ClientName,
+      l.CaseID,
+      l.Branch,
+      l.LitigationStatus,
+      l.[Nature of Suit],
+      l.CIF,
+      l.[Present Case Status],
+      l.Aging,
+      l.[Suit Filing Date],
+      l.[Suit Value],
+      l.[Law Firm],
+      l.[Court No],
+      l.[Next Hearing Date],
+      l.[Last Hearing Date],
+      l.[Cheque Number],
+      l.Plaintiff,
+      l.PlaintiffCIF,
+      l.Litigation_Receivable,
+      a.STMCode,
+      a.STMName,
+      a.RMCode,
+      a.RMName,
+      a.MonitorByCode,
+      a.MonitorBy,
+      l.URPA,
+      COALESCE(NULLIF(p.MONTHSOVERDUE, ''), NULLIF(a.MONTHSOVERDUE, '')) AS [MOD],
+      l.OVERDUE_AMOUNT,
+      a.PRINCIPAL_OD,
+      a.INTEREST_OD,
+      l.LPI,
+      l.NetExciseDutyTillLastYear,
+      l.NetExciseDutyTillCurrentYear,
+      l.PRODUCT_CATEGORY,
+      l.[ReportPreparationDate],
+      CASE
+          WHEN l.[Suit Filing Date] IS NULL THEN 'No Suit Filing Date'
+          WHEN l.[Suit Filing Date] > GETDATE() THEN 'Suit Filing Date After Current Date'
+          WHEN l.[Suit Filing Date] > l.[Last Hearing Date] THEN 'Suit Filing Date After Last Hearing Date'
+          ELSE NULL
+      END
+      AS error_type
+    FROM all_cases l
+    LEFT JOIN [dbo].[AnalyticsCLAccount] a
+        ON a.ACCOUNT_NUMBER = l.AccountNumber
+    LEFT JOIN latest_portfolio p
+        ON p.ACCOUNT_NUMBER = l.AccountNumber
+    WHERE [Suit Filing Date] IS NULL
+    OR [Suit Filing Date] > [Last Hearing Date]
+    OR [Suit Filing Date] > GETDATE()
+"""
 
 SYNC_JOBS = [
     ("litigation_cases",   query_cases),
     ("litigation_history", query_history),
     ("holidays",           query_holidays),
+    ("error_cases",        query_error_cases),
     ("updated",            query_updated),
 ]
 

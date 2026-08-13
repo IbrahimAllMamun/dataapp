@@ -412,3 +412,45 @@ def get_summary(
 
     return {"columns": columns, "rows": rows}
 
+
+
+
+
+@app.get("/api/error_cases")
+def get_error_cases(
+    branch: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=1500),
+):
+    offset = (page - 1) * page_size
+    where, params = build_filters(branch=branch)
+    wc = where_clause(where)
+    try:
+        with engine.connect() as conn:
+            # COUNT uses the SAME filters as the page query, or total_pages lies.
+            total = conn.execute(
+                text(f"SELECT COUNT(*) FROM error_cases {wc}"), params
+            ).scalar()
+
+            result = conn.execute(
+                text(f"""
+                    SELECT error_type, cif, clientname, accountnumber, caseid, branch, litigationstatus
+                    FROM error_cases
+                    {wc}
+                    ORDER BY status_rank, cif, caseid
+                    LIMIT :limit OFFSET :offset
+                """),
+                {**params, "limit": page_size, "offset": offset},
+            )
+            columns, rows = _rows(result)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Data not ready: {e}")
+
+    return {
+        "columns": columns,
+        "rows": rows,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total + page_size - 1) // page_size if total else 0,
+    }

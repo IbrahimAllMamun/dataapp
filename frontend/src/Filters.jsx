@@ -38,9 +38,12 @@ export default function Filters({
   // Reload options when the suit changes — branch lists are suit-scoped.
   useEffect(() => {
     const ctrl = new AbortController();
-    fetch(`/api/filters?suit=${encodeURIComponent(suit)}`, {
-      signal: ctrl.signal,
-    })
+    // The Summary tab has no suit, and template-stringing an undefined one
+    // sends the literal "undefined", which matches no suit_type — the branch
+    // list is the only option scoped by it, so it came back empty.
+    const qs = suit ? `?suit=${encodeURIComponent(suit)}` : "";
+
+    fetch(`/api/filters${qs}`, { signal: ctrl.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((body) => body && setOptions(body))
       .catch(() => {});

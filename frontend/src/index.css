@@ -558,9 +558,16 @@ table.summary td.num { font-family: var(--mono); font-size: 0.78125rem; }
    each suit row parks under the one before it. The `top` per row is measured
    and set in Summary.jsx, since row heights vary. Later rows sit UNDER earlier
    ones, so the z-index descends down the table. */
-.sticky-row > td { position: sticky; top: var(--stick-top, 0px); z-index: 3; }
-.sticky-row ~ .sticky-row > td { z-index: 2; }
-.sticky-row ~ .sticky-row ~ .sticky-row > td { z-index: 1; }
+/* Both header rows and every pinned body row read their offset and paint
+   order from the single pass in Summary.jsx. The `th` rule has to outrank the
+   base `th { top: 0; z-index: 2 }`, or the subheader pins on top of the
+   header instead of below it. */
+table.summary thead th,
+table.summary tr.sticky-row > td {
+  position: sticky;
+  top: var(--stick-top, 0px);
+  z-index: var(--stick-z, 1);
+}
 
 /* Grand total — heaviest, and pinned so it stays readable while scrolling. */
 .lvl-total td {
@@ -613,7 +620,10 @@ table.summary td.num { font-family: var(--mono); font-size: 0.78125rem; }
 
 /* avg over (min, max) — the range is the point, so it gets its own line. */
 .aging { display: inline-flex; flex-direction: column; align-items: center; line-height: 1.25; }
-.aging-col { text-align: center; }
+/* Outranks th.num / td.num { text-align: right }, which are (0,1,1) — the
+   bare .aging-col class loses to them no matter where it sits in the file. */
+table.summary th.num.aging-col,
+table.summary td.num.aging-col { text-align: center; }
 
 .aging-avg { color: var(--text); font-weight: 620; }
 .aging-range { font-size: 0.6875rem; color: var(--text-3); }
