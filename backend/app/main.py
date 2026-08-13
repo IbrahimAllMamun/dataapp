@@ -485,7 +485,7 @@ def get_error_cases(
                         LEFT JOIN litigation_cases l
                             ON e.caseid = l.caseid
                     )
-                    SELECT error_type, cif, l.clientname, accountnumber, caseid,
+                    SELECT error_type, cif, clientname, accountnumber, caseid,
                             branch, litigationstatus
                     FROM cases
                     {wc}
