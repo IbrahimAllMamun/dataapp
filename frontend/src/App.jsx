@@ -3,6 +3,7 @@ import CaseDetails from "./CaseDetails.jsx";
 import Filters from "./Filters.jsx";
 import NameCell from "./NameCell.jsx";
 import Summary from "./Summary.jsx";
+import CaseListModal from "./CaseListModal.jsx";
 import {
   LABELS,
   formatCell,
@@ -87,6 +88,10 @@ export default function App() {
   const [error, setError] = useState(null);
 
   const [openCaseId, setOpenCaseId] = useState(null);
+
+  // Summary drill-down: {suit, caseStatus}. Sits under CaseDetails, so closing
+  // a case returns to the list rather than all the way to the summary.
+  const [drill, setDrill] = useState(null);
 
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
 
@@ -361,7 +366,14 @@ export default function App() {
               </div>
             )}
 
-            {!error && tab.summary && <Summary data={data} loading={loading} />}
+            {!error && tab.summary && (
+              <Summary
+                data={data}
+                loading={loading}
+                filters={filters}
+                onDrill={(suit, caseStatus) => setDrill({ suit, caseStatus })}
+              />
+            )}
 
             {!error && !tab.summary && (
               <div className="panel">
@@ -529,6 +541,17 @@ export default function App() {
           </main>
         </div>
       </div>
+
+      {drill && (
+        <CaseListModal
+          suit={drill.suit}
+          caseStatus={drill.caseStatus}
+          filters={filters}
+          onPick={(caseid) => setOpenCaseId(caseid)}
+          onClose={() => setDrill(null)}
+          suspended={openCaseId !== null}
+        />
+      )}
 
       {openCaseId !== null && (
         <CaseDetails caseId={openCaseId} onClose={() => setOpenCaseId(null)} />

@@ -218,13 +218,15 @@ def get_cases(
     statuses: list[str] | None = Query(None),
     warrant: bool = Query(False),
     q: str | None = Query(None),
+    # Set by the summary drill-down to narrow to one present_case_status.
+    case_status: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=1500),
 ):
     offset = (page - 1) * page_size
     where, params = build_filters(suit=suit, branch=branch, upcoming=upcoming,
                                   products=products, statuses=statuses,
-                                  warrant=warrant, q=q)
+                                  warrant=warrant, q=q, case_status=case_status)
     wc = where_clause(where)
     try:
         with engine.connect() as conn:

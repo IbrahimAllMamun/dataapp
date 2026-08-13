@@ -9,12 +9,16 @@ Semantics follow FILTERING_ALGORITHM.md:
   - all active filters combine with AND
 """
 
+# What /api/summary shows in place of a NULL present_case_status. Shared so the
+# drill-down and the summary cannot disagree about the label.
+UNSPECIFIED_STATUS = "Unspecified"
+
 # Buckets that must be matched by date flag rather than by label.
 _MONTH_FLAG = {"This Month": "in_this_month", "Next Month": "in_next_month"}
 
 
 def build_filters(suit=None, branch=None, upcoming=None, products=None,
-                  statuses=None, warrant=False, q=None):
+                  statuses=None, warrant=False, q=None, case_status=None):
     """Return (list_of_sql_conditions, params_dict)."""
     where, params = [], {}
 
@@ -45,6 +49,16 @@ def build_filters(suit=None, branch=None, upcoming=None, products=None,
     if statuses:
         where.append("litigationstatus = ANY(:statuses)")
         params["statuses"] = list(statuses)
+
+    # Drilling into one cell of the summary. The summary renders a missing
+    # status as "Unspecified", so that label has to come back as IS NULL or the
+    # drill-down would return nothing for a group the summary counted.
+    if case_status:
+        if case_status == UNSPECIFIED_STATUS:
+            where.append("present_case_status IS NULL")
+        else:
+            where.append("present_case_status = :case_status")
+            params["case_status"] = case_status
 
     if warrant:
         where.append("is_warrant IS TRUE")

@@ -554,11 +554,16 @@ table.summary th.grp { width: 22%; }
 table.summary td { font-variant-numeric: tabular-nums; }
 table.summary td.num { font-family: var(--mono); font-size: 0.78125rem; }
 
+/* Sticky rows stack instead of overlapping: the grand total parks at the top,
+   each suit row parks under the one before it. The `top` per row is measured
+   and set in Summary.jsx, since row heights vary. Later rows sit UNDER earlier
+   ones, so the z-index descends down the table. */
+.sticky-row > td { position: sticky; top: var(--stick-top, 0px); z-index: 3; }
+.sticky-row ~ .sticky-row > td { z-index: 2; }
+.sticky-row ~ .sticky-row ~ .sticky-row > td { z-index: 1; }
+
 /* Grand total — heaviest, and pinned so it stays readable while scrolling. */
 .lvl-total td {
-  position: sticky;
-  top: 0;
-  z-index: 1;
   background: var(--surface-3);
   border-bottom: 1px solid var(--line-strong);
   font-weight: 680;
@@ -575,10 +580,36 @@ table.summary td.num { font-family: var(--mono); font-size: 0.78125rem; }
 }
 .lvl-suit td.grp { color: var(--accent); }
 
-/* Present case status — leaf rows, indented under their suit. */
+/* Suit rows expand their statuses; the twisty turns when open. */
+.lvl-suit { cursor: pointer; }
+.lvl-suit:hover td { background: var(--accent-soft); filter: brightness(0.97); }
+.lvl-suit:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.grp-label { display: inline-flex; align-items: center; gap: 7px; }
+.twisty {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  color: var(--accent);
+  transform: rotate(-90deg);
+  transition: transform var(--base) var(--ease);
+}
+.is-open .twisty { transform: none; }
+
+/* Present case status — leaf rows, indented under their suit, and each one
+   drills into the cases behind it. */
 .lvl-status td { color: var(--text-2); }
-.lvl-status td.grp { padding-left: 30px; font-weight: 440; }
-.lvl-status:hover td { background: var(--surface-hover); }
+.lvl-status td.grp { padding-left: 32px; font-weight: 440; }
+.lvl-status { cursor: pointer; }
+.lvl-status:hover td { background: var(--surface-hover); color: var(--text); }
+.lvl-status:hover td.grp { box-shadow: inset 3px 0 0 var(--accent); }
+.lvl-status:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* Rows revealed by expanding a suit fade in rather than snapping. */
+.lvl-status { animation: fade 180ms var(--ease) both; }
+
+/* The drill-down list sits under the case-detail modal it opens. */
+.list-modal { width: min(1080px, 100%); }
+.list-modal .list-scroll { flex: 1; min-height: 0; }
+.list-modal .pager { border-top: 1px solid var(--line); }
 
 /* avg over (min, max) — the range is the point, so it gets its own line. */
 .aging { display: inline-flex; flex-direction: column; align-items: flex-end; line-height: 1.25; }
