@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import CaseDetails from "./CaseDetails.jsx";
 import Filters from "./Filters.jsx";
 import NameCell from "./NameCell.jsx";
+import Summary from "./Summary.jsx";
 import {
   LABELS,
   formatCell,
@@ -22,6 +23,8 @@ import {
 // Tab label -> the `suit_type` value derived in derive.py (SUIT_TYPES), not the
 // raw nature_of_suit. "Others" covers several source values at once.
 const TABS = [
+  // Not a suit: shows aggregates across all of them.
+  { key: "Summary", summary: true },
   { key: "NI", suit: "NI Act" },
   { key: "ARA", suit: "ARA" },
   { key: "ARAE", suit: "ARAE" },
@@ -108,6 +111,38 @@ export default function App() {
     const ctrl = new AbortController();
     setLoading(true);
     setError(null);
+
+    // The summary spans every suit and aggregates, so it takes neither the
+    // suit nor the paging, and drops the two per-case filters.
+    if (tab.summary) {
+      const sq = new URLSearchParams();
+      if (filters.branch && filters.branch !== "All")
+        sq.set("branch", filters.branch);
+      if (filters.upcoming && filters.upcoming !== "All")
+        sq.set("upcoming", filters.upcoming);
+      filters.products.forEach((p) => sq.append("products", p));
+      filters.statuses.forEach((s) => sq.append("statuses", s));
+
+      fetch(`/api/summary?${sq}`, { signal: ctrl.signal })
+        .then(async (res) => {
+          const body = await res.json().catch(() => null);
+          if (!res.ok)
+            throw new Error(body?.detail || `Request failed (${res.status})`);
+          return body;
+        })
+        .then((body) => {
+          setData(body);
+          setLoading(false);
+        })
+        .catch((err) => {
+          if (err.name === "AbortError") return;
+          setError(err.message);
+          setData(null);
+          setLoading(false);
+        });
+
+      return () => ctrl.abort();
+    }
 
     const qs = new URLSearchParams({
       suit: tab.suit,
@@ -309,12 +344,14 @@ export default function App() {
               value={filters}
               onChange={changeFilters}
               onClear={clearFilters}
-              total={data?.total}
+              total={tab.summary ? undefined : data?.total}
+              // The search and the warrant flag single out individual cases,
+              // which the aggregate view has no use for.
+              perCase={!tab.summary}
             />
           </aside>
 
           <main className="content">
-
             {error && (
               <div className="error" role="alert">
                 <AlertIcon />
@@ -324,7 +361,9 @@ export default function App() {
               </div>
             )}
 
-            {!error && (
+            {!error && tab.summary && <Summary data={data} loading={loading} />}
+
+            {!error && !tab.summary && (
               <div className="panel">
                 {refreshing && (
                   <div className="loadbar" role="status" aria-label="Loading" />

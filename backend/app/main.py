@@ -279,20 +279,7 @@ def get_case_details(caseid: int):
                 text("""
                     SELECT hearing_date, case_status, makedate, aging
                     FROM (
-                        SELECT
-                            hearing_date,
-                            case_status,
-                            makedate,
-                            COALESCE(
-                                LEAD(hearing_date::date)
-                                    OVER (ORDER BY hearing_date::date)
-                                    - hearing_date::date,
-                                CASE
-                                    WHEN litigationstatus = 'Active'
-                                        THEN CURRENT_DATE - hearing_date::date
-                                    ELSE 0
-                                END
-                            ) AS aging
+                        SELECT hearing_date,case_status,makedate,aging
                         FROM litigation_history
                         WHERE caseid = :caseid
                     ) t
@@ -348,81 +335,78 @@ def get_reportdate():
     return {"reportdate": reportdate}
 
 
+# One row per hierarchy level, produced in a single pass by GROUPING SETS:
+#   level 0  grand total          (suit_type NULL, present_case_status NULL)
+#   level 1  per suit_type        (present_case_status NULL)
+#   level 2  per suit_type + present_case_status
+#
+# litigation_receivable is text in Postgres — sync.py stores it as it arrives —
+# so SUM() over it fails outright without the cast below.
 
 
+@app.get("/api/summary")
+def get_summary(
+    branch: str | None = Query(None),
+    upcoming: str | None = Query(None),
+    products: list[str] | None = Query(None),
+    statuses: list[str] | None = Query(None),
+):
+    """Aggregates across every suit type.
 
+    Deliberately takes neither `suit` (the summary groups BY suit_type, so
+    constraining to one would collapse the middle level to a single row) nor
+    `q`/`warrant` — the client/CIF/account search and the warrant flag pick out
+    individual cases, which is the opposite of what this view is for.
+    """
+    where, params = build_filters(
+        branch=branch, upcoming=upcoming, products=products, statuses=statuses
+    )
+    wc = where_clause(where)
 
-# @app.get("/api/summary")
-# def get_summary(
-#     suit: str = Query("NI Act"),  # a suit_type value — see filters.build_filters
-#     branch: str | None = Query(None),
-#     upcoming: str | None = Query(None),
-#     products: list[str] | None = Query(None),
-#     statuses: list[str] | None = Query(None),
-#     warrant: bool = Query(False),
-#     q: str | None = Query(None),
-#     page: int = Query(1, ge=1),
-#     page_size: int = Query(50, ge=1, le=1500),
-# ):
-#     offset = (page - 1) * page_size
-#     where, params = build_filters(suit=suit, branch=branch, upcoming=upcoming,
-#                                   products=products, statuses=statuses,
-#                                   warrant=warrant, q=q)
-#     wc = where_clause(where)
-#     try:
-#         with engine.connect() as conn:
-#             # COUNT uses the SAME filters as the page query, or total_pages lies.
-#             total = conn.execute(
-#                 text(f"SELECT COUNT(*) FROM litigation_cases {wc}"), params
-#             ).scalar()
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text(f"""
+                WITH summary_tbs AS (   
+                    SELECT suit_type, present_case_status, litigationstatus, suit_value,
+                        litigation_receivable, overdue_amount, aging, last_hearing_date,
+                        (SELECT aging FROM litigation_history h
+                            WHERE h.caseid = c.caseid
+                            ORDER BY h.hearing_date DESC, h.makedate DESC
+                            LIMIT 1) AS aging_status
+                    FROM litigation_cases c
+                    {wc} 
+                    )
+                    SELECT
+                        CASE
+                            WHEN GROUPING(suit_type) = 1 THEN 0
+                            WHEN GROUPING(present_case_status) = 1 THEN 1
+                            ELSE 2
+                        END AS level,
+                        suit_type,
+                        CASE WHEN present_case_status IS NULL THEN 'Unspecified' ELSE present_case_status END AS present_case_status,
+                        COUNT(*) AS cases,
+                        ROUND(SUM(suit_value)::numeric, 0) AS total_suit_value,
+                        ROUND(SUM(litigation_receivable)::numeric, 0) AS total_receivable,
+                        ROUND(SUM(overdue_amount)::numeric, 0) AS total_overdue,
+                        ROUND(AVG(aging)::numeric, 0) AS avg_aging,
+                        MIN(aging) AS min_aging,
+                        MAX(aging) AS max_aging,
+                        ROUND(AVG(aging_status)::numeric, 0)
+                            AS avg_aging_status,
+                        MIN(aging_status) AS min_aging_status,
+                        MAX(aging_status) AS max_aging_status
+                    FROM summary_tbs
+                    GROUP BY GROUPING SETS ((), (suit_type), (suit_type, present_case_status))
+                    ORDER BY
+                        CASE WHEN GROUPING(suit_type) = 1 THEN 0 ELSE 1 END,
+                        CASE suit_type WHEN 'NI Act' THEN 1 WHEN 'ARA' THEN 2
+                                    WHEN 'ARAE' THEN 3 WHEN 'Others' THEN 4 ELSE 5 END,
+                        GROUPING(present_case_status) DESC,
+                        present_case_status
+                """), params)   
+            columns, rows = _rows(result)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Data not ready: {e}")
 
-#             result = conn.execute(
-#                 text(f"""
-#                     SELECT 
-#     suit_type, 
-#     NULL AS present_case_status,
-#     SUM(
-#         CASE WHEN litigationstatus = 'Active' THEN 1 ELSE 0 END
-#     ) AS Active_Cases,
-#     ROUND(SUM(suit_value)::numeric, 0) AS total_suit_value,
-#     ROUND(SUM(litigation_receivable)::numeric, 0) AS total_receivable,
-#     ROUND(SUM(overdue_amount)::numeric, 0) AS total_overdue,
-#     ROUND(AVG(aging)::numeric, 0) AS avg_aging,
-#     ROUND(MIN(aging)::numeric, 0) AS min_aging,
-#     ROUND(MAX(aging)::numeric, 0) AS max_aging,
-
-#     coalesce(ROUND(AVG(CASE
-#                 WHEN litigationstatus = 'Active'
-#                     THEN CURRENT_DATE - last_hearing_date::date
-#                 ELSE NULL
-#             END)::numeric, 0),0) AS avg_aging_status,
-#     coalesce(ROUND(MIN(CASE
-#                 WHEN litigationstatus = 'Active'
-#                     THEN CURRENT_DATE - last_hearing_date::date
-#                 ELSE NULL
-#             END)::numeric, 0),0) AS min_aging_status,
-#     coalesce(ROUND(MAX(CASE
-#                 WHEN litigationstatus = 'Active'
-#                     THEN CURRENT_DATE - last_hearing_date::date
-#                 ELSE NULL
-#             END)::numeric, 0),0) AS max_aging_status
-# FROM litigation_cases
-# GROUP BY suit_type
-
-#                 """),
-#                 {**params, "limit": page_size, "offset": offset},
-#             )
-#             columns, rows = _rows(result)
-#     except Exception as e:
-#         raise HTTPException(status_code=503, detail=f"Data not ready: {e}")
-
-#     return {
-#         "columns": columns,
-#         "rows": rows,
-#         "total": total,
-#         "page": page,
-#         "page_size": page_size,
-#         "total_pages": (total + page_size - 1) // page_size if total else 0,
-#     }
-
+    return {"columns": columns, "rows": rows}
 

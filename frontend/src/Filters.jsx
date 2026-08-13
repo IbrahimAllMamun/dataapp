@@ -24,14 +24,23 @@ function Chip({ checked, onChange, children }) {
   );
 }
 
-export default function Filters({ suit, value, onChange, onClear, total }) {
+export default function Filters({
+  suit,
+  value,
+  onChange,
+  onClear,
+  total,
+  perCase = true,
+}) {
   const [options, setOptions] = useState(null);
   const [term, setTerm] = useState(value.q ?? "");
 
   // Reload options when the suit changes — branch lists are suit-scoped.
   useEffect(() => {
     const ctrl = new AbortController();
-    fetch(`/api/filters?suit=${encodeURIComponent(suit)}`, { signal: ctrl.signal })
+    fetch(`/api/filters?suit=${encodeURIComponent(suit)}`, {
+      signal: ctrl.signal,
+    })
       .then((r) => (r.ok ? r.json() : null))
       .then((body) => body && setOptions(body))
       .catch(() => {});
@@ -69,7 +78,7 @@ export default function Filters({ suit, value, onChange, onClear, total }) {
   // SME is the default selection and the one people scan for, so it leads.
   // Sort is stable, so any other label keeps the server's order.
   const products = [...options.products].sort(
-    (a, b) => (a === "SME" ? 0 : 1) - (b === "SME" ? 0 : 1)
+    (a, b) => (a === "SME" ? 0 : 1) - (b === "SME" ? 0 : 1),
   );
 
   return (
@@ -77,46 +86,58 @@ export default function Filters({ suit, value, onChange, onClear, total }) {
       <div className="filter-row">
         <label className="filter">
           <span>Branch</span>
-          <select value={value.branch} onChange={(e) => set({ branch: e.target.value })}>
+          <select
+            value={value.branch}
+            onChange={(e) => set({ branch: e.target.value })}
+          >
             <option value="All">All</option>
             {options.branches.map((b) => (
-              <option key={b} value={b}>{b}</option>
+              <option key={b} value={b}>
+                {b}
+              </option>
             ))}
           </select>
         </label>
 
         <label className="filter">
           <span>Upcoming Hearing</span>
-          <select value={value.upcoming} onChange={(e) => set({ upcoming: e.target.value })}>
+          <select
+            value={value.upcoming}
+            onChange={(e) => set({ upcoming: e.target.value })}
+          >
             <option value="All">All</option>
             {options.upcoming.map((u) => (
-              <option key={u} value={u}>{u}</option>
+              <option key={u} value={u}>
+                {u}
+              </option>
             ))}
           </select>
         </label>
 
-        <label className="filter grow">
-          <span>Search client / CIF / account</span>
-          <div className="search-wrap">
-            <SearchIcon />
-            <input
-              type="search"
-              value={term}
-              placeholder="Type to narrow…"
-              onChange={(e) => setTerm(e.target.value)}
-            />
-            {term && (
-              <button
-                type="button"
-                className="search-clear"
-                onClick={() => setTerm("")}
-                aria-label="Clear search"
-              >
-                <CloseIcon />
-              </button>
-            )}
-          </div>
-        </label>
+        {perCase && (
+          <label className="filter grow">
+            <span>Search client / CIF / account</span>
+            <div className="search-wrap">
+              <SearchIcon />
+              <input
+                type="search"
+                value={term}
+                placeholder="Type to narrow…"
+                onChange={(e) => setTerm(e.target.value)}
+              />
+              {term && (
+                <button
+                  type="button"
+                  className="search-clear"
+                  onClick={() => setTerm("")}
+                  aria-label="Clear search"
+                >
+                  <CloseIcon />
+                </button>
+              )}
+            </div>
+          </label>
+        )}
       </div>
 
       <div className="filter-row">
@@ -134,15 +155,17 @@ export default function Filters({ suit, value, onChange, onClear, total }) {
           onToggle={(s) => set({ statuses: toggleIn(value.statuses, s) })}
         />
 
-        <fieldset className="filter checks">
-          <legend>Warrant</legend>
-          <Chip
-            checked={value.warrant}
-            onChange={(e) => set({ warrant: e.target.checked })}
-          >
-            Warrant cases only
-          </Chip>
-        </fieldset>
+        {perCase && (
+          <fieldset className="filter checks">
+            <legend>Warrant</legend>
+            <Chip
+              checked={value.warrant}
+              onChange={(e) => set({ warrant: e.target.checked })}
+            >
+              Warrant cases only
+            </Chip>
+          </fieldset>
+        )}
 
         <div className="filter actions">
           {typeof total === "number" && (
@@ -150,7 +173,9 @@ export default function Filters({ suit, value, onChange, onClear, total }) {
               <b>{total.toLocaleString()}</b> matching
             </span>
           )}
-          <button className="ghost" onClick={onClear}>Clear all</button>
+          <button className="ghost" onClick={onClear}>
+            Clear all
+          </button>
         </div>
       </div>
     </div>

@@ -74,35 +74,55 @@ query_cases = """
     LEFT JOIN latest_portfolio p
         ON p.ACCOUNT_NUMBER = l.AccountNumber
     WHERE l.[ReportPreparationDate] = (SELECT MAX([ReportPreparationDate]) FROM [dbo].[AnalyticsLitigationAccount])
+    AND l.[Suit Filing Date] <= l.[Last Hearing Date]
+    AND l.[Suit Filing Date] <= GETDATE()
 """
 
 query_history = """
     WITH ranked AS (
-          SELECT
-              caseid AS CaseID,
-              HearingDate AS hearing_date,
-              CaseStatus AS case_status,
-              MakeDate,
-              ROW_NUMBER() OVER (
-                  PARTITION BY caseid, HearingDate, CaseStatus
-                  ORDER BY MakeDate DESC
-              ) AS rn
-          FROM [dbo].[AnalyticsLitigationAccountHearing]
-      ),
-      case_data AS(
         SELECT
-          CaseID,
-          LitigationStatus
+            caseid AS CaseID,
+            HearingDate AS hearing_date,
+            CaseStatus AS case_status,
+            MakeDate,
+            ROW_NUMBER() OVER (
+                PARTITION BY caseid, HearingDate, CaseStatus
+                ORDER BY MakeDate DESC
+            ) AS rn,
+            LEAD(HearingDate) OVER (
+                PARTITION BY caseid
+                ORDER BY HearingDate
+            ) AS last_hearing
+        FROM [dbo].[AnalyticsLitigationAccountHearing]
+        WHERE HearingDate <= GETDATE()
+    ),
+    case_data AS (
+        SELECT
+            CaseID,
+            LitigationStatus
         FROM [dbo].[AnalyticsLitigationAccount]
         WHERE [ReportPreparationDate] = (SELECT MAX([ReportPreparationDate]) FROM [dbo].[AnalyticsLitigationAccount])
-      )
+    )
 
-      SELECT r.CaseID, r.hearing_date, r.case_status, r.MakeDate, c.LitigationStatus
-      FROM ranked r
-      LEFT JOIN case_data c
+    SELECT
+        r.CaseID,
+        r.hearing_date,
+        r.case_status,
+        r.MakeDate,
+        c.LitigationStatus,
+        COALESCE(
+            DATEDIFF(day, r.hearing_date, r.last_hearing),
+            CASE
+                WHEN c.LitigationStatus = 'Active'
+                    THEN DATEDIFF(day, CAST(r.hearing_date AS date), CAST(GETDATE() AS date))
+                ELSE 0
+            END
+        ) AS aging
+    FROM ranked r
+    LEFT JOIN case_data c
         ON r.CaseID = c.CaseID
-      WHERE r.rn = 1
-      ORDER BY r.CaseID, r.hearing_date DESC, r.MakeDate DESC;
+    WHERE r.rn = 1
+    ORDER BY r.CaseID, r.hearing_date DESC, r.MakeDate DESC;
 """
 
 query_holidays = "SELECT [Serial], [Date], [Day], [Holiday] FROM [SME].[Holiday]"

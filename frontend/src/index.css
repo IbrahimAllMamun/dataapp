@@ -538,6 +538,58 @@ th.num { text-align: right; }
 /* Rows enter in a short cascade; the delay is set inline and capped in JS. */
 .row-in { animation: rise 320ms var(--ease-out) both; }
 
+/* ---------------------------------------------------------------- summary */
+/* Eight columns of long money figures. Tighter gutters and headers that may
+   wrap keep them on screen at laptop widths instead of behind a scrollbar. */
+table.summary th,
+table.summary td { padding-left: 10px; padding-right: 10px; }
+table.summary th { white-space: normal; line-height: 1.25; }
+
+table.summary th.grp,
+table.summary td.grp { text-align: left; white-space: nowrap; }
+/* Auto layout hands the leftover width to the only non-nowrap column; this
+   stops Group from hoarding it. */
+table.summary th.grp { width: 22%; }
+
+table.summary td { font-variant-numeric: tabular-nums; }
+table.summary td.num { font-family: var(--mono); font-size: 0.78125rem; }
+
+/* Grand total — heaviest, and pinned so it stays readable while scrolling. */
+.lvl-total td {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-3);
+  border-bottom: 1px solid var(--line-strong);
+  font-weight: 680;
+  color: var(--text);
+}
+.lvl-total td.grp { text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.75rem; }
+
+/* Suit type — the middle level, tinted to separate the blocks. */
+.lvl-suit td {
+  background: var(--accent-soft);
+  border-top: 1px solid var(--line);
+  font-weight: 620;
+  color: var(--text);
+}
+.lvl-suit td.grp { color: var(--accent); }
+
+/* Present case status — leaf rows, indented under their suit. */
+.lvl-status td { color: var(--text-2); }
+.lvl-status td.grp { padding-left: 30px; font-weight: 440; }
+.lvl-status:hover td { background: var(--surface-hover); }
+
+/* avg over (min, max) — the range is the point, so it gets its own line. */
+.aging { display: inline-flex; flex-direction: column; align-items: flex-end; line-height: 1.25; }
+.aging-avg { color: var(--text); font-weight: 620; }
+.aging-range { font-size: 0.6875rem; color: var(--text-3); }
+.aging-range .lo { color: var(--ok-fg); font-weight: 620; }
+.aging-range .hi { color: var(--danger-fg); font-weight: 620; }
+/* The tinted rows already carry a weight, so avg must not double up on it. */
+.lvl-total .aging-avg,
+.lvl-suit .aging-avg { color: inherit; }
+
 /* ----------------------------------------------------------------- badges */
 .badge {
   display: inline-flex;
