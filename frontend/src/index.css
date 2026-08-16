@@ -700,6 +700,10 @@ table.summary tr.sticky-row > td {
   color: var(--text);
 }
 .lvl-suit td.grp { color: var(--accent); }
+/* The summary has four suit rows, so accent-coloured labels read as links.
+   The law-firm table has ~70, where the same rule becomes a wall of red — the
+   twisty alone carries the "expandable" cue there. */
+table.summary.firms .lvl-suit td.grp { color: var(--text); }
 
 /* Suit rows expand their statuses; the twisty turns when open. */
 .lvl-suit { cursor: pointer; }

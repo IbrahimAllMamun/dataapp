@@ -13,12 +13,30 @@ Semantics follow FILTERING_ALGORITHM.md:
 # drill-down and the summary cannot disagree about the label.
 UNSPECIFIED_STATUS = "Unspecified"
 
+# Same idea for a case with no law firm recorded. LAW_FIRM_LABEL is the SQL
+# that produces it, so the aggregate and the drill-down normalise identically —
+# 71 rows in the current data have a NULL firm.
+UNSPECIFIED_FIRM = "Unspecified"
+LAW_FIRM_LABEL = "COALESCE(NULLIF(TRIM(law_firm), ''), 'Unspecified')"
+
+# A case only counts once its filing date is present and plausible. Every
+# aggregate and every list has to apply the same three guards or their totals
+# disagree — the law-firm row would promise more cases than its drill-down can
+# show. Kept as conditions rather than a hardcoded "AND ..." tail because with
+# no filters at all the WHERE would otherwise open with a bare AND.
+VALID_FILING = [
+    "suit_filing_date IS NOT NULL",
+    "suit_filing_date <= last_hearing_date",
+    "suit_filing_date <= CURRENT_DATE",
+]
+
 # Buckets that must be matched by date flag rather than by label.
 _MONTH_FLAG = {"This Month": "in_this_month", "Next Month": "in_next_month"}
 
 
 def build_filters(suit=None, branch=None, upcoming=None, products=None,
-                  statuses=None, warrant=False, q=None, case_status=None):
+                  statuses=None, warrant=False, q=None, case_status=None,
+                  law_firm=None, firm_q=None):
     """Return (list_of_sql_conditions, params_dict)."""
     where, params = [], {}
 
@@ -59,6 +77,22 @@ def build_filters(suit=None, branch=None, upcoming=None, products=None,
         else:
             where.append("present_case_status = :case_status")
             params["case_status"] = case_status
+
+    # Drilling into one cell of the law-firm view. Normalised through
+    # LAW_FIRM_LABEL so "Unspecified" reaches the rows the aggregate counted
+    # under that label, rather than looking for a firm literally so named.
+    if law_firm:
+        if law_firm == UNSPECIFIED_FIRM:
+            where.append("NULLIF(TRIM(law_firm), '') IS NULL")
+        else:
+            where.append("TRIM(law_firm) = :law_firm")
+            params["law_firm"] = law_firm
+
+    # The law-firm search box. Matched against the same normalised label, so
+    # typing "unspec" finds the no-firm bucket instead of silently missing it.
+    if firm_q:
+        where.append(f"{LAW_FIRM_LABEL} ILIKE :firm_q")
+        params["firm_q"] = f"%{firm_q}%"
 
     if warrant:
         where.append("is_warrant IS TRUE")

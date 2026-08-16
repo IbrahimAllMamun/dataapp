@@ -13,7 +13,10 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from .database import engine
 from .sync import run_sync
-from .filters import build_filters, build_error_filters, where_clause, ERROR_TYPES
+from .filters import (
+    build_filters, build_error_filters, where_clause, ERROR_TYPES,
+    LAW_FIRM_LABEL, VALID_FILING,
+)
 
 log = logging.getLogger("api")
 
@@ -220,14 +223,21 @@ def get_cases(
     q: str | None = Query(None),
     # Set by the summary drill-down to narrow to one present_case_status.
     case_status: str | None = Query(None),
+    # Set by the law-firm drill-down to narrow to one firm.
+    law_firm: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=1500),
 ):
     offset = (page - 1) * page_size
     where, params = build_filters(suit=suit, branch=branch, upcoming=upcoming,
                                   products=products, statuses=statuses,
-                                  warrant=warrant, q=q, case_status=case_status)
-    wc = where_clause(where)
+                                  warrant=warrant, q=q, case_status=case_status,
+                                  law_firm=law_firm)
+    # The filing-date guards belong to BOTH queries below. They used to be a
+    # hardcoded tail on the page query only, so COUNT reported more cases than
+    # the list could ever show — the last pages came back empty and a
+    # drill-down's total disagreed with the row that opened it.
+    wc = where_clause(where + VALID_FILING)
     try:
         with engine.connect() as conn:
             # COUNT uses the SAME filters as the page query, or total_pages lies.
@@ -240,9 +250,6 @@ def get_cases(
                     SELECT cif, clientname, accountnumber, caseid, branch, litigationstatus
                     FROM litigation_cases
                     {wc}
-                    AND suit_filing_date IS NOT NULL
-                    AND suit_filing_date <= last_hearing_date
-                    AND suit_filing_date <= CURRENT_DATE
                     ORDER BY suit_filing_date DESC, status_rank, cif, caseid
                     LIMIT :limit OFFSET :offset
                 """),
@@ -366,12 +373,15 @@ def get_summary(
     where, params = build_filters(
         branch=branch, upcoming=upcoming, products=products, statuses=statuses
     )
-    wc = where_clause(where)
+    # Deselecting every product AND every status leaves no conditions at all,
+    # which used to render as "FROM litigation_cases  AND suit_filing_date ..."
+    # — a syntax error surfacing as a 503. The guards are conditions now.
+    wc = where_clause(where + VALID_FILING)
 
     try:
         with engine.connect() as conn:
             result = conn.execute(text(f"""
-                WITH summary_tbs AS (   
+                WITH summary_tbs AS (
                     SELECT suit_type, present_case_status, litigationstatus, suit_value,
                         litigation_receivable, overdue_amount, aging, last_hearing_date,
                         (SELECT aging FROM litigation_history h
@@ -379,10 +389,7 @@ def get_summary(
                             ORDER BY h.hearing_date DESC, h.makedate DESC
                             LIMIT 1) AS aging_status
                     FROM litigation_cases c
-                    {wc} 
-                    AND suit_filing_date IS NOT NULL
-                    AND suit_filing_date <= last_hearing_date
-                    AND suit_filing_date <= CURRENT_DATE
+                    {wc}
                     )
                     SELECT
                         CASE
@@ -394,7 +401,11 @@ def get_summary(
                         CASE WHEN present_case_status IS NULL THEN 'Unspecified' ELSE present_case_status END AS present_case_status,
                         COUNT(*) AS cases,
                         ROUND(SUM(suit_value)::numeric, 0) AS total_suit_value,
-                        ROUND(SUM(litigation_receivable)::numeric, 0) AS total_receivable,
+                        -- The cast has to be inside the SUM: litigation_receivable
+                        -- is text, and sum(text) does not exist. ::text first so
+                        -- this survives a later sync storing it as numeric.
+                        ROUND(SUM(NULLIF(litigation_receivable::text, '')::numeric), 0)
+                            AS total_receivable,
                         ROUND(SUM(overdue_amount)::numeric, 0) AS total_overdue,
                         ROUND(AVG(aging)::numeric, 0) AS avg_aging,
                         MIN(aging) AS min_aging,
@@ -437,76 +448,81 @@ def get_summary(
 
 
 
+# Two levels, one pass:
+#   level 0  per law firm            (suit_type NULL)
+#   level 1  per law firm + suit_type
+#
+# GROUPING(law_firm) cannot drive the level here: law_firm appears in BOTH
+# grouping sets, so it is 0 on every row. GROUPING(suit_type) is what actually
+# distinguishes the two.
+
+
 @app.get("/api/law_firm")
-def get_summary(
+def get_law_firms(
     branch: str | None = Query(None),
     upcoming: str | None = Query(None),
     products: list[str] | None = Query(None),
     statuses: list[str] | None = Query(None),
+    # Search box on the Law Firms tab. Narrows which firms are aggregated at
+    # all, rather than merely highlighting them.
+    firm: str | None = Query(None),
 ):
-    """Aggregates across every Law Firm.
+    """Aggregates across every law firm, and each firm's suit types.
 
-    Deliberately takes neither `law_firm` (the summary groups BY law_firm, so
-    constraining to one would collapse the middle level to a single row) nor
+    Deliberately takes neither `law_firm` (this groups BY law_firm, so
+    constraining to one would collapse the top level to a single row) nor
     `q`/`warrant` — the client/CIF/account search and the warrant flag pick out
     individual cases, which is the opposite of what this view is for.
     """
     where, params = build_filters(
-        branch=branch, upcoming=upcoming, products=products, statuses=statuses
+        branch=branch, upcoming=upcoming, products=products, statuses=statuses,
+        firm_q=firm,
     )
-    wc = where_clause(where)
+    # The filing-date guards travel as conditions, so a cleared filter set
+    # cannot leave the WHERE opening with a bare AND.
+    wc = where_clause(where + VALID_FILING)
 
     try:
         with engine.connect() as conn:
             result = conn.execute(text(f"""
-                WITH summary_tbs AS (   
-                    SELECT suit_type, litigationstatus, suit_value,
-                        litigation_receivable, aging
+                WITH firm_cases AS (
+                    SELECT {LAW_FIRM_LABEL} AS law_firm,
+                           suit_type, suit_value, litigation_receivable, aging
                     FROM litigation_cases
-                    {wc} 
-                    AND suit_filing_date IS NOT NULL
-                    AND suit_filing_date <= last_hearing_date
-                    AND suit_filing_date <= CURRENT_DATE
-                    )
-                    SELECT
-                        CASE
-                            WHEN GROUPING(law_firm) = 1 THEN 0
-                            ELSE 1
-                        END AS level,
-                        law_firm,
-                        suit_type,
-                        COUNT(*) AS cases,
-                        ROUND(SUM(suit_value)::numeric, 0) AS total_suit_value,
-                        ROUND(SUM(litigation_receivable)::numeric, 0) AS total_receivable,
-                        ROUND(AVG(aging)::numeric, 0) AS avg_aging,
-                        MIN(aging) AS min_aging,
-                        MAX(aging) AS max_aging
-                    FROM summary_tbs
-                    GROUP BY GROUPING SETS ((law_firm), (law_firm, suit_type))
-                    ORDER BY
-                        GROUPING(law_firm),
-                        CASE WHEN GROUPING(suit_type) = 1 THEN 0 ELSE 1 END,
-                        CASE suit_type WHEN 'NI Act' THEN 1 WHEN 'ARA' THEN 2
-                                    WHEN 'ARAE' THEN 3 WHEN 'Others' THEN 4 ELSE 5 END
-                """), params)   
+                    {wc}
+                )
+                SELECT
+                    CASE WHEN GROUPING(suit_type) = 1 THEN 0 ELSE 1 END AS level,
+                    law_firm,
+                    suit_type,
+                    COUNT(*) AS cases,
+                    ROUND(SUM(suit_value)::numeric, 0) AS total_suit_value,
+                    -- litigation_receivable is text in Postgres, so the cast has
+                    -- to be INSIDE the SUM; casting its result fails outright.
+                    -- ::text first, so this keeps working if a later sync stores
+                    -- the column as numeric.
+                    ROUND(SUM(NULLIF(litigation_receivable::text, '')::numeric), 0)
+                        AS total_receivable,
+                    ROUND(AVG(aging)::numeric, 0) AS avg_aging,
+                    MIN(aging) AS min_aging,
+                    MAX(aging) AS max_aging
+                FROM firm_cases
+                GROUP BY GROUPING SETS ((law_firm), (law_firm, suit_type))
+                ORDER BY
+                    -- Busiest firm first, and every suit row kept directly under
+                    -- its own firm: a window over the aggregate gives each row
+                    -- its firm's total to sort on.
+                    SUM(COUNT(*)) OVER (PARTITION BY law_firm) DESC,
+                    law_firm,
+                    GROUPING(suit_type) DESC,
+                    CASE suit_type WHEN 'NI Act' THEN 1 WHEN 'ARA' THEN 2
+                                   WHEN 'ARAE' THEN 3 WHEN 'Others' THEN 4 ELSE 5 END
+            """), params)
             columns, rows = _rows(result)
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Data not ready: {e}")
 
     return {"columns": columns, "rows": rows}
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 # Fixed order, matching the CASE in sync.query_error_cases, so an error type

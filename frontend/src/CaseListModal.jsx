@@ -7,13 +7,16 @@ const EXIT_MS = 150;
 const PAGE_SIZE = 100;
 
 /**
- * The cases behind one summary cell: a suit type, one present_case_status, and
- * whatever filters were active. Selecting a row opens that case's details on
- * top of this list rather than replacing it, so closing them returns here.
+ * The cases behind one drilled-into cell, plus whatever filters were active.
+ * Two callers: the Summary tab passes a suit type + present_case_status, the
+ * Law Firms tab passes a suit type + law firm. Selecting a row opens that
+ * case's details on top of this list rather than replacing it, so closing
+ * them returns here.
  */
 export default function CaseListModal({
   suit,
   caseStatus,
+  lawFirm,
   filters,
   onPick,
   onClose,
@@ -40,10 +43,13 @@ export default function CaseListModal({
 
     const qs = new URLSearchParams({
       suit,
-      case_status: caseStatus,
       page: String(page),
       page_size: String(PAGE_SIZE),
     });
+    // Only one of these is ever set — sending an empty one would filter on a
+    // literal blank rather than being ignored.
+    if (caseStatus) qs.set("case_status", caseStatus);
+    if (lawFirm) qs.set("law_firm", lawFirm);
     if (filters.branch && filters.branch !== "All") qs.set("branch", filters.branch);
     if (filters.upcoming && filters.upcoming !== "All")
       qs.set("upcoming", filters.upcoming);
@@ -67,7 +73,7 @@ export default function CaseListModal({
       });
 
     return () => ctrl.abort();
-  }, [suit, caseStatus, filters, page]);
+  }, [suit, caseStatus, lawFirm, filters, page]);
 
   useEffect(() => {
     // While a case sits on top of this list, Escape belongs to that case —
@@ -108,14 +114,14 @@ export default function CaseListModal({
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
-        aria-label={`${suit} — ${caseStatus}`}
+        aria-label={`${caseStatus ?? lawFirm} — ${suit}`}
         style={exitStyle}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-head">
           <div className="case-head">
             <h2>
-              {caseStatus}
+              {caseStatus ?? lawFirm}
               <span className="badge cif">{suit}</span>
             </h2>
             {typeof data?.total === "number" && (

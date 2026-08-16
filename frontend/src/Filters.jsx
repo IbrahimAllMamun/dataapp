@@ -32,6 +32,9 @@ const ALL = {
   products: true,
   statuses: true,
   warrant: true,
+  // Law Firms tab only — a separate box from `search`, because it narrows the
+  // firms being aggregated rather than picking out individual cases.
+  firm: false,
 };
 
 export default function Filters({
@@ -45,6 +48,7 @@ export default function Filters({
   const show = { ...ALL, ...showProp };
   const [options, setOptions] = useState(null);
   const [term, setTerm] = useState(value.q ?? "");
+  const [firmTerm, setFirmTerm] = useState(value.firm ?? "");
 
   // Reload options when the suit changes — branch lists are suit-scoped.
   useEffect(() => {
@@ -61,8 +65,9 @@ export default function Filters({
     return () => ctrl.abort();
   }, [suit]);
 
-  // Keep the search box in step when the parent resets filters.
+  // Keep the search boxes in step when the parent resets filters.
   useEffect(() => setTerm(value.q ?? ""), [value.q]);
+  useEffect(() => setFirmTerm(value.firm ?? ""), [value.firm]);
 
   // Debounce typing so we don't fire a request per keystroke.
   useEffect(() => {
@@ -70,6 +75,12 @@ export default function Filters({
     const id = setTimeout(() => onChange({ ...value, q: term }), 300);
     return () => clearTimeout(id);
   }, [term]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (firmTerm === (value.firm ?? "")) return;
+    const id = setTimeout(() => onChange({ ...value, firm: firmTerm }), 300);
+    return () => clearTimeout(id);
+  }, [firmTerm]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const set = (patch) => onChange({ ...value, ...patch });
 
@@ -129,6 +140,31 @@ export default function Filters({
                 </option>
               ))}
             </select>
+          </label>
+        )}
+
+        {show.firm && (
+          <label className="filter grow">
+            <span>Search law firm</span>
+            <div className="search-wrap">
+              <SearchIcon />
+              <input
+                type="search"
+                value={firmTerm}
+                placeholder="Firm name…"
+                onChange={(e) => setFirmTerm(e.target.value)}
+              />
+              {firmTerm && (
+                <button
+                  type="button"
+                  className="search-clear"
+                  onClick={() => setFirmTerm("")}
+                  aria-label="Clear law firm search"
+                >
+                  <CloseIcon />
+                </button>
+              )}
+            </div>
           </label>
         )}
 
@@ -192,7 +228,7 @@ export default function Filters({
         <div className="filter actions">
           {typeof total === "number" && (
             <span className="match-count">
-              <b>{total.toLocaleString()}</b> matching
+              <b>{total.toLocaleString()}</b> Cases
             </span>
           )}
           <button className="ghost" onClick={onClear}>

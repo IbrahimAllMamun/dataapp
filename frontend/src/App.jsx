@@ -5,6 +5,7 @@ import NameCell from "./NameCell.jsx";
 import Summary from "./Summary.jsx";
 import CaseListModal from "./CaseListModal.jsx";
 import Errors from "./Errors.jsx";
+import LawFirms from "./LawFirms.jsx";
 import {
   LABELS,
   formatCell,
@@ -26,8 +27,9 @@ import {
 // Tab label -> the `suit_type` value derived in derive.py (SUIT_TYPES), not the
 // raw nature_of_suit. "Others" covers several source values at once.
 const TABS = [
-  // Not a suit: shows aggregates across all of them.
+  // Neither of these is a suit: they aggregate across all of them.
   { key: "Summary", summary: true },
+  { key: "Law Firms", firms: true },
   { key: "NI", suit: "NI Act" },
   { key: "ARA", suit: "ARA" },
   { key: "ARAE", suit: "ARAE" },
@@ -56,6 +58,7 @@ const DEFAULT_FILTERS = {
   statuses: ["Active"],
   warrant: false,
   q: "",
+  firm: "",
 };
 
 const SKELETON_ROWS = 8;
@@ -102,8 +105,9 @@ export default function App() {
 
   const [openCaseId, setOpenCaseId] = useState(null);
 
-  // Summary drill-down: {suit, caseStatus}. Sits under CaseDetails, so closing
-  // a case returns to the list rather than all the way to the summary.
+  // Drill-down into a case list: {suit, caseStatus} from the Summary tab, or
+  // {suit, lawFirm} from Law Firms. Sits under CaseDetails, so closing a case
+  // returns to the list rather than all the way back to the table.
   const [drill, setDrill] = useState(null);
 
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
@@ -149,6 +153,37 @@ export default function App() {
       filters.products.forEach((p) => eq.append("products", p));
 
       fetch(`/api/error_summary?${eq}`, { signal: ctrl.signal })
+        .then(async (res) => {
+          const body = await res.json().catch(() => null);
+          if (!res.ok)
+            throw new Error(body?.detail || `Request failed (${res.status})`);
+          return body;
+        })
+        .then((body) => {
+          setData(body);
+          setLoading(false);
+        })
+        .catch((err) => {
+          if (err.name === "AbortError") return;
+          setError(err.message);
+          setData(null);
+          setLoading(false);
+        });
+
+      return () => ctrl.abort();
+    }
+
+    if (tab.firms) {
+      const fq = new URLSearchParams();
+      if (filters.branch && filters.branch !== "All")
+        fq.set("branch", filters.branch);
+      if (filters.upcoming && filters.upcoming !== "All")
+        fq.set("upcoming", filters.upcoming);
+      filters.products.forEach((p) => fq.append("products", p));
+      filters.statuses.forEach((st) => fq.append("statuses", st));
+      if (filters.firm) fq.set("firm", filters.firm);
+
+      fetch(`/api/law_firm?${fq}`, { signal: ctrl.signal })
         .then(async (res) => {
           const body = await res.json().catch(() => null);
           if (!res.ok)
@@ -262,6 +297,14 @@ export default function App() {
   const selectTab = useCallback((next) => {
     setTab(next);
     setPage(1); // page N of the old suit is meaningless for the new one
+    // Each tab reads a different endpoint, and the row SHAPES differ. Holding
+    // the old rows meant the incoming panel rendered the outgoing tab's data
+    // for a frame or two — the summary read 220 law-firm rows as its own
+    // levels, marked every one sticky, and burned ~600ms of forced layout
+    // before the real data arrived. A filter or page change still keeps its
+    // rows on screen (dimmed); only a tab change drops them.
+    setData(null);
+    setError(null);
     if (next.suit) setLastSuitKey(next.key); // remember it for the collapsed chip
     setSuitExpanded(false); // any real selection closes the spread-out picker
   }, []);
@@ -530,7 +573,9 @@ export default function App() {
               value={filters}
               onChange={changeFilters}
               onClear={clearFilters}
-              total={tab.summary || tab.errors ? undefined : data?.total}
+              total={
+                tab.summary || tab.errors || tab.firms ? undefined : data?.total
+              }
               // Each tab asks only for the controls it can actually apply.
               show={
                 tab.errors
@@ -540,9 +585,11 @@ export default function App() {
                       statuses: false,
                       warrant: false,
                     }
-                  : tab.summary
-                    ? { search: false, warrant: false }
-                    : undefined
+                  : tab.firms
+                    ? { search: false, warrant: false, firm: true }
+                    : tab.summary
+                      ? { search: false, warrant: false }
+                      : undefined
               }
             />
           </aside>
@@ -566,6 +613,14 @@ export default function App() {
               />
             )}
 
+            {!error && tab.firms && (
+              <LawFirms
+                data={data}
+                loading={loading}
+                onDrill={(lawFirm, suit) => setDrill({ lawFirm, suit })}
+              />
+            )}
+
             {!error && tab.summary && (
               <Summary
                 data={data}
@@ -575,7 +630,7 @@ export default function App() {
               />
             )}
 
-            {!error && !tab.summary && !tab.errors && (
+            {!error && !tab.summary && !tab.errors && !tab.firms && (
               <div className="panel">
                 {refreshing && (
                   <div className="loadbar" role="status" aria-label="Loading" />
@@ -746,6 +801,7 @@ export default function App() {
         <CaseListModal
           suit={drill.suit}
           caseStatus={drill.caseStatus}
+          lawFirm={drill.lawFirm}
           filters={filters}
           onPick={(caseid) => setOpenCaseId(caseid)}
           onClose={() => setDrill(null)}
