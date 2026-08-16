@@ -225,7 +225,7 @@ export default function Errors({ data, loading, filters, onPick }) {
       <div className="panel summary-panel">
         <div className="empty">
           <EmptyIcon />
-          <strong>No data errors</strong>
+          <strong>No invalid data</strong>
           <span>Every case passes the filing-date checks.</span>
         </div>
       </div>

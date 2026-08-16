@@ -35,12 +35,12 @@ const TABS = [
   { key: "ARAE", suit: "ARAE" },
   { key: "Others", suit: "Others" },
   // Data-quality exceptions, not a suit.
-  { key: "Inavalid Data", errors: true },
+  { key: "Invalid Data", errors: true },
 ];
 
 // The four suit tabs collapse into a single chip in the nav. Its position in
 // TABS never changes, so filtering TABS down to one suit entry keeps Summary
-// and Errors either side of it without any special-casing of index 0/-1.
+// and Invalid Data either side of it without any special-casing of 0/-1.
 const SUIT_TABS = TABS.filter((t) => t.suit);
 const DEFAULT_SUIT_KEY = SUIT_TABS[0].key;
 
@@ -349,7 +349,7 @@ export default function App() {
   }, [suitExpanded]);
 
   // What actually renders: the four suit tabs replaced by one chip, unless
-  // spread out. TABS keeps Summary and Errors either side of it either way.
+  // spread out. TABS keeps Summary and Invalid Data either side of it.
   const visibleTabs = suitExpanded
     ? TABS
     : TABS.filter((t) => !t.suit || t.key === chipTab.key);
@@ -366,18 +366,46 @@ export default function App() {
     const settle = () => {
       // Below the sidebar breakpoint the bar is full-width and never resizes
       // between the two states, so the stylesheet stays in charge.
-      if (window.matchMedia("(max-width: 720px)").matches) {
-        nav.style.width = "";
-        navWidthRef.current = null;
-        return;
-      }
+      const fluid = window.matchMedia("(max-width: 720px)").matches;
 
       // Probe the natural width with transitions off, so this measurement
       // cannot itself start an animation or read a half-finished one.
       const from = navWidthRef.current;
       nav.style.transition = "none";
+      // Two probes, and they must be in this order.
+      //
+      // First the widest label's natural column. max-content, NOT auto: auto
+      // is capped by the grid cell it sits in, so on a narrow viewport it
+      // reports the squeezed column and the floor comes out too small — 104px
+      // instead of 111px at 760px wide, which is exactly where the label was
+      // still clipping. Zero the floor first or the probe measures the floor.
+      // Measured rather than hardcoded because it moves whenever a tab is
+      // renamed: "Errors" to "Invalid Data" took the bar from 396px to 451px.
+      nav.style.setProperty("--tab-min", "0px");
+      nav.style.width = "max-content";
+      const colMin = Math.max(
+        0,
+        ...[...nav.querySelectorAll(".tab")].map(
+          (t) => t.getBoundingClientRect().width,
+        ),
+      );
+      nav.style.setProperty("--tab-min", `${Math.ceil(colMin)}px`);
+
+      // Then the width the bar should actually take, with the floor applied.
+      // auto here on purpose: it stops at the space available, and anything
+      // the floor pushes past that scrolls instead of stretching the bar.
       nav.style.width = "auto";
       const to = nav.getBoundingClientRect().width;
+
+      if (fluid) {
+        // Full-width down here: the stylesheet sets the width, but the floor
+        // measured just above still decides when it scrolls.
+        nav.style.width = "";
+        nav.style.transition = "";
+        nav.classList.remove("is-resizing");
+        navWidthRef.current = null;
+        return;
+      }
 
       if (from === null || from === to || prefersReducedMotion()) {
         nav.style.width = `${to}px`; // first paint, or nothing to travel

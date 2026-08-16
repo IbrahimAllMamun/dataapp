@@ -422,6 +422,15 @@ body::before {
      viewports raise it to give each label a floor (see the 600px block). */
   --tab-min: 0px;
   grid-auto-columns: minmax(var(--tab-min), 1fr);
+  /* App.jsx measures --tab-min from the widest label. Once the columns cannot
+     hold it the grid overflows, and the bar scrolls rather than clipping.
+     max-width keeps that overflow inside the bar: without it the floor raises
+     the grid's min-content above the space available and the bar itself runs
+     off the viewport instead of scrolling. */
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
   gap: 0;
   /* App.jsx overrides this with an explicit px width so expanding the suit
      chip can ease rather than jump. Everything inside is sized as a
@@ -1303,8 +1312,14 @@ table.inner tbody tr:hover td { background: var(--surface-2); }
 
 /* ------------------------------------------------------------- responsive */
 
-/* Below this the sidebar becomes an off-canvas drawer. */
-@media (max-width: 1024px) {
+/* Below this the sidebar becomes an off-canvas drawer AND the tab bar drops
+   to its own row — the two switch together, by request.
+   1150 rather than 1024 because the single-row topbar stops fitting at 1112:
+   measured, it needs 48px of gutter, 2x16px gaps, a 452px tab bar and two
+   290px side columns (the grid centres the bar with equal 1fr sides, so the
+   wider of brand/actions sets both). Renaming the title to "IDLC Litigation
+   Dashboard" and the tab to "Invalid Data" is what pushed it past 1024. */
+@media (max-width: 1150px) {
   .layout { grid-template-columns: minmax(0, 1fr); }
 
   .icon-btn.filter-toggle { display: grid; }
@@ -1412,7 +1427,6 @@ table.inner tbody tr:hover td { background: var(--surface-2); }
      labels into it. "Summary" is one word with nowhere to wrap, so without a
      floor it is the one that clips. */
   .tabs {
-    --tab-min: 76px;
     overflow-x: auto;
     overflow-y: hidden;
     overscroll-behavior-x: contain;
