@@ -418,7 +418,10 @@ body::before {
   position: relative;
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: 1fr;
+  /* --tab-min is 0 by default, so this behaves exactly like 1fr. Narrow
+     viewports raise it to give each label a floor (see the 600px block). */
+  --tab-min: 0px;
+  grid-auto-columns: minmax(var(--tab-min), 1fr);
   gap: 0;
   /* App.jsx overrides this with an explicit px width so expanding the suit
      chip can ease rather than jump. Everything inside is sized as a
@@ -471,7 +474,9 @@ body::before {
   top: 3px;
   bottom: 3px;
   left: 3px;
-  width: calc((100% - 6px) / var(--tab-count));
+  /* Mirrors grid-auto-columns exactly — same floor, same fraction — so the
+     pill still covers precisely one column once the floor kicks in. */
+  width: max(var(--tab-min), calc((100% - 6px) / var(--tab-count)));
   border-radius: calc(var(--r-md) - 2px);
   background: var(--accent);
   box-shadow: var(--shadow-sm);
@@ -1304,6 +1309,27 @@ table.inner tbody tr:hover td { background: var(--surface-2); }
 
   .icon-btn.filter-toggle { display: grid; }
 
+  /* The tab bar drops to its own row HERE, not at 720px. Since Law Firms
+     joined it the bar is wide enough to run into the title well above that:
+     measured, it covered 5px of "Litigation Cases" at 960 and 189px at 760.
+     Reflowing at the drawer's breakpoint keeps the two in step — the moment
+     the sidebar folds away, the bar takes its own line. */
+  .topbar-inner {
+    grid-template-columns: 1fr auto;
+    row-gap: 10px;
+    /* Trimmed from 24px: with all seven tabs spread out the bar wants 687px,
+       which the wider gutter denied it just under 745px, squeezing the labels
+       into a clip. */
+    padding-inline: 14px;
+  }
+  /* Centred at its natural width rather than stretched: full-width tabs only
+     make sense once the viewport is genuinely narrow (see the 720px block). */
+  .tabs {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    justify-self: center;
+  }
+
   .sidebar {
     position: fixed;
     top: 0;
@@ -1365,15 +1391,42 @@ table.inner tbody tr:hover td { background: var(--surface-2); }
 @media (max-width: 720px) {
   .wrap { padding: 14px; }
 
-  /* Brand and actions share the first row; the tabs take the second. */
+  /* The two-row topbar is already in force from 1024px; this only tightens
+     the spacing and lets the bar span the full width. */
   .topbar-inner {
-    grid-template-columns: 1fr auto;
     gap: 10px;
     padding: 10px 14px;
   }
-  .tabs { grid-row: 2; grid-column: 1 / -1; width: 100%; min-width: 0; }
+  .tabs { width: 100%; min-width: 0; justify-self: stretch; }
   .tab { padding: 7px 8px; }
   .tab.tab-chip { padding-right: 6px; }
+}
+
+/* Seven equal columns is the worst case — the suit picker spread open. Below
+   this the longest label ("Law Firms") no longer fits one, so the type steps
+   down and, past the point where even that fails, wraps onto a second line
+   instead of being clipped mid-word. Wrapping only changes the row's height,
+   so the columns stay equal and the pill's arithmetic is untouched. */
+@media (max-width: 600px) {
+  /* Below the floor the bar scrolls sideways rather than crushing seven
+     labels into it. "Summary" is one word with nowhere to wrap, so without a
+     floor it is the one that clips. */
+  .tabs {
+    --tab-min: 76px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+  }
+  .tab {
+    padding: 7px 5px;
+    font-size: 0.6875rem;
+    letter-spacing: 0;
+    white-space: normal;
+    line-height: 1.2;
+    hyphens: none;
+  }
+  .tab.tab-chip { gap: 3px; padding-right: 4px; }
+  .tab-chip-caret { width: 10px; height: 10px; }
   .brand h1 { font-size: 0.9375rem; }
   /* The date pill costs more width than it earns next to a wrapped nav. */
   .topbar-right .total { display: none; }

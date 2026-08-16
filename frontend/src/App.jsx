@@ -35,7 +35,7 @@ const TABS = [
   { key: "ARAE", suit: "ARAE" },
   { key: "Others", suit: "Others" },
   // Data-quality exceptions, not a suit.
-  { key: "Errors", errors: true },
+  { key: "Invalid Data", errors: true },
 ];
 
 // The four suit tabs collapse into a single chip in the nav. Its position in
@@ -98,7 +98,14 @@ export default function App() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
 
-  const [data, setData] = useState(null);
+  // The fetched body TOGETHER with the tab it was fetched for. Each tab reads
+  // a different endpoint and the row shapes are not interchangeable, so a
+  // panel must never be handed another tab's rows — the summary would read
+  // law-firm levels as its own, mark ~220 rows sticky and burn ~600ms of
+  // forced layout. Tagging is used rather than clearing on tab change:
+  // clearing also fired when re-selecting the ALREADY ACTIVE tab, where
+  // nothing re-runs the fetch, so the list was emptied with no way back.
+  const [payload, setPayload] = useState(null);
   const [reportdate, setReportdate] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -160,13 +167,13 @@ export default function App() {
           return body;
         })
         .then((body) => {
-          setData(body);
+          setPayload({ tab: tab.key, body });
           setLoading(false);
         })
         .catch((err) => {
           if (err.name === "AbortError") return;
           setError(err.message);
-          setData(null);
+          setPayload({ tab: tab.key, body: null });
           setLoading(false);
         });
 
@@ -191,13 +198,13 @@ export default function App() {
           return body;
         })
         .then((body) => {
-          setData(body);
+          setPayload({ tab: tab.key, body });
           setLoading(false);
         })
         .catch((err) => {
           if (err.name === "AbortError") return;
           setError(err.message);
-          setData(null);
+          setPayload({ tab: tab.key, body: null });
           setLoading(false);
         });
 
@@ -221,13 +228,13 @@ export default function App() {
           return body;
         })
         .then((body) => {
-          setData(body);
+          setPayload({ tab: tab.key, body });
           setLoading(false);
         })
         .catch((err) => {
           if (err.name === "AbortError") return;
           setError(err.message);
-          setData(null);
+          setPayload({ tab: tab.key, body: null });
           setLoading(false);
         });
 
@@ -257,13 +264,13 @@ export default function App() {
         return body;
       })
       .then((body) => {
-        setData(body);
+        setPayload({ tab: tab.key, body });
         setLoading(false);
       })
       .catch((err) => {
         if (err.name === "AbortError") return; // superseded by a newer request
         setError(err.message);
-        setData(null);
+        setPayload({ tab: tab.key, body: null });
         setLoading(false);
       });
 
@@ -297,14 +304,6 @@ export default function App() {
   const selectTab = useCallback((next) => {
     setTab(next);
     setPage(1); // page N of the old suit is meaningless for the new one
-    // Each tab reads a different endpoint, and the row SHAPES differ. Holding
-    // the old rows meant the incoming panel rendered the outgoing tab's data
-    // for a frame or two — the summary read 220 law-firm rows as its own
-    // levels, marked every one sticky, and burned ~600ms of forced layout
-    // before the real data arrived. A filter or page change still keeps its
-    // rows on screen (dimmed); only a tab change drops them.
-    setData(null);
-    setError(null);
     if (next.suit) setLastSuitKey(next.key); // remember it for the collapsed chip
     setSuitExpanded(false); // any real selection closes the spread-out picker
   }, []);
@@ -409,6 +408,10 @@ export default function App() {
     });
   }, []);
 
+  // Only this tab's own body is ever visible; anything else reads as "not
+  // loaded yet", which is exactly what it is.
+  const data = payload?.tab === tab.key ? payload.body : null;
+
   const totalPages = data?.total_pages ?? 0;
   // Identifier columns are folded into their name column's cell, so they must
   // not also get a column of their own.
@@ -462,7 +465,7 @@ export default function App() {
               <div className="brand-mark">
                 <LogoMark />
               </div>
-              <h1>Litigation Cases</h1>
+              <h1>IDLC Litigation Dashboard</h1>
             </div>
           </div>
 
