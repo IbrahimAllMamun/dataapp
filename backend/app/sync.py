@@ -187,7 +187,7 @@ query_error_cases = """
       AS error_type
     FROM [dbo].[AnalyticsLitigationAccount]
     WHERE [ReportPreparationDate] = (SELECT MAX([ReportPreparationDate]) FROM [dbo].[AnalyticsLitigationAccount])
-    AND AND LitigationStatus = 'Active'
+    AND LitigationStatus = 'Active'
     AND (NULLIF([Suit Filing Date], '') IS NULL
     OR NULLIF([Suit Filing Date], '') > [Last Hearing Date]
     OR NULLIF([Suit Filing Date], '') > GETDATE())

@@ -422,6 +422,93 @@ def get_summary(
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+@app.get("/api/law_firm")
+def get_summary(
+    branch: str | None = Query(None),
+    upcoming: str | None = Query(None),
+    products: list[str] | None = Query(None),
+    statuses: list[str] | None = Query(None),
+):
+    """Aggregates across every Law Firm.
+
+    Deliberately takes neither `law_firm` (the summary groups BY law_firm, so
+    constraining to one would collapse the middle level to a single row) nor
+    `q`/`warrant` — the client/CIF/account search and the warrant flag pick out
+    individual cases, which is the opposite of what this view is for.
+    """
+    where, params = build_filters(
+        branch=branch, upcoming=upcoming, products=products, statuses=statuses
+    )
+    wc = where_clause(where)
+
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text(f"""
+                WITH summary_tbs AS (   
+                    SELECT suit_type, litigationstatus, suit_value,
+                        litigation_receivable, aging
+                    FROM litigation_cases
+                    {wc} 
+                    AND suit_filing_date IS NOT NULL
+                    AND suit_filing_date <= last_hearing_date
+                    AND suit_filing_date <= CURRENT_DATE
+                    )
+                    SELECT
+                        CASE
+                            WHEN GROUPING(law_firm) = 1 THEN 0
+                            ELSE 1
+                        END AS level,
+                        law_firm,
+                        suit_type,
+                        COUNT(*) AS cases,
+                        ROUND(SUM(suit_value)::numeric, 0) AS total_suit_value,
+                        ROUND(SUM(litigation_receivable)::numeric, 0) AS total_receivable,
+                        ROUND(AVG(aging)::numeric, 0) AS avg_aging,
+                        MIN(aging) AS min_aging,
+                        MAX(aging) AS max_aging
+                    FROM summary_tbs
+                    GROUP BY GROUPING SETS ((law_firm), (law_firm, suit_type))
+                    ORDER BY
+                        GROUPING(law_firm),
+                        CASE WHEN GROUPING(suit_type) = 1 THEN 0 ELSE 1 END,
+                        CASE suit_type WHEN 'NI Act' THEN 1 WHEN 'ARA' THEN 2
+                                    WHEN 'ARAE' THEN 3 WHEN 'Others' THEN 4 ELSE 5 END
+                """), params)   
+            columns, rows = _rows(result)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Data not ready: {e}")
+
+    return {"columns": columns, "rows": rows}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # Fixed order, matching the CASE in sync.query_error_cases, so an error type
 # with no rows today still keeps its place tomorrow.
 _ERROR_ORDER = " ".join(

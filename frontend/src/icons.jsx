@@ -11,14 +11,27 @@ const stroke = {
   strokeLinejoin: "round",
 };
 
-export function ScalesIcon(props) {
+/**
+ * The IDLC mark: a solid red block with two brackets stepping off its
+ * top-right corner.
+ *
+ * Unlike everything else in this file it is a FILLED mark, not a stroked
+ * icon, so it deliberately does not take the shared `stroke` props. The red
+ * is the brand's own and stays fixed in both themes; the brackets ride on
+ * `currentColor` so they read black on a light tile and pale on a dark one,
+ * instead of disappearing into it.
+ *
+ * The artwork is authored on a ~58 unit square — the viewBox has to match it,
+ * or only its top-left corner is visible.
+ */
+export const BRAND_RED = "#ED1C24";
+
+export function LogoMark(props) {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" {...stroke} {...props}>
-      <g id="surface1">
-        <path style=" stroke:none;fill-rule:nonzero;fill:rgb(92.941177%,10.980392%,14.117648%);fill-opacity:1;" d="M 0 15.050781 L 43.21875 15.050781 L 43.21875 58.339844 L 0 58.339844 Z M 0 15.050781 "/>
-        <path style=" stroke:none;fill-rule:nonzero;fill:rgb(0%,0%,0%);fill-opacity:1;" d="M 50.75 7.507812 L 21.9375 7.507812 L 21.9375 11.3125 L 47.019531 11.3125 L 47.019531 36.433594 L 50.75 36.433594 Z M 50.75 7.507812 "/>
-        <path style=" stroke:none;fill-rule:nonzero;fill:rgb(0%,0%,0%);fill-opacity:1;" d="M 58.28125 0.0273438 L 36.671875 0.0273438 L 36.671875 3.769531 L 54.546875 3.769531 L 54.546875 21.609375 L 58.28125 21.609375 Z M 58.28125 0.0273438 "/>
-      </g>
+    <svg viewBox="0 0 58.32 58.37" aria-hidden="true" {...props}>
+      <path fill={BRAND_RED} d="M 0 15.050781 L 43.21875 15.050781 L 43.21875 58.339844 L 0 58.339844 Z M 0 15.050781 " />
+      <path fill="currentColor" d="M 50.75 7.507812 L 21.9375 7.507812 L 21.9375 11.3125 L 47.019531 11.3125 L 47.019531 36.433594 L 50.75 36.433594 Z M 50.75 7.507812 " />
+      <path fill="currentColor" d="M 58.28125 0.0273438 L 36.671875 0.0273438 L 36.671875 3.769531 L 54.546875 3.769531 L 54.546875 21.609375 L 58.28125 21.609375 Z M 58.28125 0.0273438 " />
     </svg>
   );
 }

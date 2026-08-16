@@ -19,7 +19,7 @@ import {
   EmptyIcon,
   FilterIcon,
   MoonIcon,
-  ScalesIcon,
+  LogoMark,
   SunIcon,
 } from "./icons.jsx";
 
@@ -417,7 +417,7 @@ export default function App() {
 
             <div className="brand">
               <div className="brand-mark">
-                <ScalesIcon />
+                <LogoMark />
               </div>
               <h1>Litigation Cases</h1>
             </div>

@@ -5,9 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Litigation Cases</title>
 
+    <!--
+      The IDLC mark on a light tile, mirroring .brand-mark in the app. The
+      artwork is the same geometry as LogoMark in icons.jsx, scaled out of its
+      ~58 unit square into a 32px tile (translate 5, scale 22/58.32).
+      The tile is drawn rather than left transparent so the black brackets
+      still read when a browser puts the favicon on dark tab chrome.
+    -->
     <link
       rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f46e5'/%3E%3Cg fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M16 8v16M9 12h14M11 12l-3 6h6zM21 12l-3 6h6z'/%3E%3C/g%3E%3C/svg%3E"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='.5' y='.5' width='31' height='31' rx='7.5' fill='%23fff' stroke='%23e7e4e5'/%3E%3Cg transform='translate(5 5) scale(.3772)'%3E%3Cpath fill='%23ED1C24' d='M0 15.05H43.22V58.34H0Z'/%3E%3Cpath fill='%23171314' d='M50.75 7.51H21.94V11.31H47.02V36.43H50.75Z'/%3E%3Cpath fill='%23171314' d='M58.28 .03H36.67V3.77H54.55V21.61H58.28Z'/%3E%3C/g%3E%3C/svg%3E"
     />
 
     <!-- Theme is stamped before first paint so the page never flashes light. -->
