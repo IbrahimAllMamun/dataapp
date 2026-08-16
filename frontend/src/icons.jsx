@@ -14,11 +14,15 @@ const stroke = {
 export function ScalesIcon(props) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" {...stroke} {...props}>
-      <path d="M12 4v16M7 20h10M6 8h12M6 8l-3 6h6zM18 8l-3 6h6z" />
-      <circle cx="12" cy="4" r="1.4" />
+      <g id="surface1">
+        <path style=" stroke:none;fill-rule:nonzero;fill:rgb(92.941177%,10.980392%,14.117648%);fill-opacity:1;" d="M 0 15.050781 L 43.21875 15.050781 L 43.21875 58.339844 L 0 58.339844 Z M 0 15.050781 "/>
+        <path style=" stroke:none;fill-rule:nonzero;fill:rgb(0%,0%,0%);fill-opacity:1;" d="M 50.75 7.507812 L 21.9375 7.507812 L 21.9375 11.3125 L 47.019531 11.3125 L 47.019531 36.433594 L 50.75 36.433594 Z M 50.75 7.507812 "/>
+        <path style=" stroke:none;fill-rule:nonzero;fill:rgb(0%,0%,0%);fill-opacity:1;" d="M 58.28125 0.0273438 L 36.671875 0.0273438 L 36.671875 3.769531 L 54.546875 3.769531 L 54.546875 21.609375 L 58.28125 21.609375 Z M 58.28125 0.0273438 "/>
+      </g>
     </svg>
   );
 }
+
 
 export function SearchIcon(props) {
   return (

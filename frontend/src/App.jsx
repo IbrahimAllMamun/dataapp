@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import CaseDetails from "./CaseDetails.jsx";
 import Filters from "./Filters.jsx";
 import NameCell from "./NameCell.jsx";
@@ -14,6 +14,7 @@ import {
 } from "./format.js";
 import {
   AlertIcon,
+  ChevronIcon,
   CloseIcon,
   EmptyIcon,
   FilterIcon,
@@ -34,6 +35,15 @@ const TABS = [
   // Data-quality exceptions, not a suit.
   { key: "Errors", errors: true },
 ];
+
+// The four suit tabs collapse into a single chip in the nav. Its position in
+// TABS never changes, so filtering TABS down to one suit entry keeps Summary
+// and Errors either side of it without any special-casing of index 0/-1.
+const SUIT_TABS = TABS.filter((t) => t.suit);
+const DEFAULT_SUIT_KEY = SUIT_TABS[0].key;
+
+// Mirrors --tabs-dur in index.css: how long the bar takes to change width.
+const TABS_DUR = 300;
 
 const PAGE_SIZES = [25, 50, 100, 200];
 
@@ -101,6 +111,16 @@ export default function App() {
   // Only meaningful below the sidebar breakpoint, where the filters become an
   // off-canvas drawer. Above it the sidebar is always in the layout.
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // The suit-type nav collapses NI/ARA/ARAE/Others into one chip. lastSuitKey
+  // is which one it shows and re-navigates to; suitExpanded is whether all
+  // four are currently spread out for picking.
+  const [lastSuitKey, setLastSuitKey] = useState(DEFAULT_SUIT_KEY);
+  const [suitExpanded, setSuitExpanded] = useState(false);
+  const tabsRef = useRef(null);
+  // Last settled width of the tab bar, so a change has a start to ease from.
+  const navWidthRef = useRef(null);
+  const resizeTimerRef = useRef(null);
 
   const scrollRef = useRef(null);
 
@@ -242,7 +262,100 @@ export default function App() {
   const selectTab = useCallback((next) => {
     setTab(next);
     setPage(1); // page N of the old suit is meaningless for the new one
+    if (next.suit) setLastSuitKey(next.key); // remember it for the collapsed chip
+    setSuitExpanded(false); // any real selection closes the spread-out picker
   }, []);
+
+  // The chip shows whichever suit is active, or the last one visited.
+  const chipTab = SUIT_TABS.find((t) => t.key === lastSuitKey) ?? SUIT_TABS[0];
+
+  const onChipClick = useCallback(() => {
+    // Already on that suit: clicking again spreads out all four to pick a
+    // different one. Not on it: jump straight back to the last one shown.
+    if (tab.suit) setSuitExpanded(true);
+    else selectTab(chipTab);
+  }, [tab.suit, chipTab, selectTab]);
+
+  // Clicking away from the spread-out picker (without choosing one) or
+  // pressing Escape collapses it back to the chip.
+  useEffect(() => {
+    if (!suitExpanded) return;
+
+    const onDocPointer = (e) => {
+      if (tabsRef.current && !tabsRef.current.contains(e.target)) {
+        setSuitExpanded(false);
+      }
+    };
+    const onKey = (e) => e.key === "Escape" && setSuitExpanded(false);
+
+    document.addEventListener("mousedown", onDocPointer);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocPointer);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [suitExpanded]);
+
+  // What actually renders: the four suit tabs replaced by one chip, unless
+  // spread out. TABS keeps Summary and Errors either side of it either way.
+  const visibleTabs = suitExpanded
+    ? TABS
+    : TABS.filter((t) => !t.suit || t.key === chipTab.key);
+
+  // The bar is content-sized, so expanding the chip changes its width in one
+  // step. Everything inside is a percentage of that width — the grid's equal
+  // columns and the pill alike — so easing this single value carries the
+  // whole bar with it. Measured rather than assumed: the natural width
+  // depends on which suit label the chip is currently showing.
+  useLayoutEffect(() => {
+    const nav = tabsRef.current;
+    if (!nav) return;
+
+    const settle = () => {
+      // Below the sidebar breakpoint the bar is full-width and never resizes
+      // between the two states, so the stylesheet stays in charge.
+      if (window.matchMedia("(max-width: 720px)").matches) {
+        nav.style.width = "";
+        navWidthRef.current = null;
+        return;
+      }
+
+      // Probe the natural width with transitions off, so this measurement
+      // cannot itself start an animation or read a half-finished one.
+      const from = navWidthRef.current;
+      nav.style.transition = "none";
+      nav.style.width = "auto";
+      const to = nav.getBoundingClientRect().width;
+
+      if (from === null || from === to || prefersReducedMotion()) {
+        nav.style.width = `${to}px`; // first paint, or nothing to travel
+        nav.style.transition = "";
+        nav.classList.remove("is-resizing");
+      } else {
+        // The columns under the pill resize in one step, so for as long as the
+        // bar is travelling the pill has to be driven by width alone.
+        nav.classList.add("is-resizing");
+        clearTimeout(resizeTimerRef.current);
+        resizeTimerRef.current = setTimeout(
+          () => nav.classList.remove("is-resizing"),
+          TABS_DUR,
+        );
+
+        // Pin the start explicitly and flush it, otherwise the browser only
+        // ever sees the end value and there is nothing to interpolate.
+        nav.style.width = `${from}px`;
+        nav.getBoundingClientRect();
+        nav.style.transition = "";
+        nav.style.width = `${to}px`;
+      }
+      navWidthRef.current = to;
+    };
+
+    settle();
+    // Crossing the breakpoint swaps which of the two rules applies.
+    window.addEventListener("resize", settle);
+    return () => window.removeEventListener("resize", settle);
+  }, [suitExpanded, chipTab.key]);
 
   // A new page starts at the top of the table, not wherever the last one ended.
   const goToPage = useCallback((next) => {
@@ -258,7 +371,9 @@ export default function App() {
   // not also get a column of their own.
   const columns = mergeIdentityColumns(data?.columns ?? []);
   const rows = data?.rows ?? [];
-  const tabIndex = TABS.findIndex((t) => t.key === tab.key);
+  // Works whether the active tab is standing alone as the chip (collapsed) or
+  // sitting in its real slot (spread out) — its key is found either way.
+  const tabIndex = visibleTabs.findIndex((t) => t.key === tab.key);
 
   // First load has nothing to show yet; later loads keep the previous page on
   // screen (dimmed, with a progress bar) rather than blanking the table.
@@ -309,25 +424,61 @@ export default function App() {
           </div>
 
           <nav
-            className="tabs"
+            className={`tabs${suitExpanded ? " is-expanded" : ""}`}
             role="tablist"
             aria-label="Suit type"
+            ref={tabsRef}
             style={{
-              "--tab-count": TABS.length,
+              "--tab-count": visibleTabs.length,
               "--tab-index": Math.max(tabIndex, 0),
+              // Where the suit band sits, derived rather than hardcoded so
+              // adding a suit to TABS needs no change here.
+              "--suit-start": Math.max(
+                visibleTabs.findIndex((t) => t.suit),
+                0,
+              ),
+              "--suit-span": visibleTabs.filter((t) => t.suit).length,
             }}
           >
-            {TABS.map((t) => (
-              <button
-                key={t.key}
-                role="tab"
-                aria-selected={t.key === tab.key}
-                className={`tab${t.key === tab.key ? " active" : ""}`}
-                onClick={() => selectTab(t)}
-              >
-                {t.key}
-              </button>
-            ))}
+            {visibleTabs.map((t) => {
+              // Stands in for all four suits while they are collapsed.
+              const isChip = !suitExpanded && !!t.suit;
+              const isSpread = suitExpanded && !!t.suit;
+              return (
+                <button
+                  key={t.key}
+                  role="tab"
+                  aria-selected={t.key === tab.key}
+                  aria-haspopup={isChip ? "true" : undefined}
+                  aria-expanded={isChip ? suitExpanded : undefined}
+                  title={isChip ? "Choose a suit type" : undefined}
+                  className={[
+                    "tab",
+                    t.key === tab.key && "active",
+                    isChip && "tab-chip",
+                    isSpread && "tab-spread",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  style={
+                    isSpread
+                      ? {
+                          // Distance from the chip, so the reveal radiates
+                          // out of the tab that was already on screen rather
+                          // than sweeping in from the left.
+                          "--spread-i": Math.abs(
+                            SUIT_TABS.indexOf(t) - SUIT_TABS.indexOf(chipTab),
+                          ),
+                        }
+                      : undefined
+                  }
+                  onClick={isChip ? onChipClick : () => selectTab(t)}
+                >
+                  {t.key}
+                  {isChip && <ChevronIcon className="tab-chip-caret" />}
+                </button>
+              );
+            })}
           </nav>
 
           <div className="topbar-right">

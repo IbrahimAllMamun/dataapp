@@ -30,6 +30,9 @@
   --accent-contrast: #ffffff;
   --accent-soft: #eef0ff;
   --accent-ring: rgba(79, 70, 229, 0.32);
+  /* Tab hover. Deliberately a different hue from the indigo pill, so a
+     hovered tab never reads as an already-selected one. */
+  --tab-hover: rgba(14, 165, 233, 0.13);
 
   /* semantic */
   --ok-bg: #e7f7ee;
@@ -61,6 +64,9 @@
   --fast: 140ms;
   --base: 220ms;
   --slow: 380ms;
+  /* The bar's width, the pill's width and the pill's travel all run on this
+     one value, so the three stay locked together mid-flight. */
+  --tabs-dur: 300ms;
 
   --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -89,6 +95,7 @@
   --accent-contrast: #0b0e16;
   --accent-soft: rgba(129, 140, 248, 0.14);
   --accent-ring: rgba(129, 140, 248, 0.38);
+  --tab-hover: rgba(56, 189, 248, 0.20);
 
   --ok-bg: rgba(16, 185, 129, 0.14);
   --ok-fg: #4ade9f;
@@ -401,50 +408,142 @@ body::before {
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
   gap: 0;
+  /* App.jsx overrides this with an explicit px width so expanding the suit
+     chip can ease rather than jump. Everything inside is sized as a
+     percentage of the bar, so animating this one value carries the columns
+     and the pill along with it, in the same layout pass. */
   width: fit-content;
-  min-width: 320px;
-  padding: 4px;
+  padding: 3px;
   /* Sits inside the top bar now, so it carries no outer spacing. */
   margin: 0;
   border: 1px solid var(--line);
-  border-radius: var(--r-lg);
+  border-radius: var(--r-md);
   background: var(--surface-2);
   box-shadow: var(--shadow-xs);
+  transition:
+    width var(--tabs-dur) var(--ease),
+    border-color var(--base) var(--ease);
 }
+.tabs:hover { border-color: var(--line-strong); }
 
-/* The sliding pill. Equal-width columns let it move by whole multiples. */
-.tabs::before {
+/* The suit types, banded together while they are spread out, so the four of
+   them read as one group rather than as peers of Summary and Errors. Sized
+   from the same column arithmetic as the pill, so it stays locked to them
+   while the bar is resizing. Collapsed, it fades out entirely and the chip
+   is left looking exactly like Summary or Errors. */
+.tabs::after {
   content: "";
   position: absolute;
   z-index: 0;
-  top: 4px;
-  bottom: 4px;
-  left: 4px;
-  width: calc((100% - 8px) / var(--tab-count));
-  border-radius: var(--r-md);
+  top: 3px;
+  bottom: 3px;
+  left: calc(3px + var(--suit-start, 1) * (100% - 6px) / var(--tab-count));
+  width: calc(var(--suit-span, 1) * (100% - 6px) / var(--tab-count));
+  border: 1px solid var(--accent-ring);
+  border-radius: calc(var(--r-md) - 2px);
+  background: var(--accent-soft);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--tabs-dur) var(--ease);
+}
+.tabs.is-expanded::after { opacity: 1; }
+
+/* The sliding pill. Equal-width columns let it move by whole multiples.
+   --tab-count changes when the suit chip expands, so the width is expressed
+   against it rather than baked in. */
+.tabs::before {
+  content: "";
+  position: absolute;
+  /* Above the suit band, below the labels. */
+  z-index: 1;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc((100% - 6px) / var(--tab-count));
+  border-radius: calc(var(--r-md) - 2px);
   background: var(--accent);
   box-shadow: var(--shadow-sm);
   transform: translateX(calc(var(--tab-index) * 100%));
-  transition: transform 280ms var(--ease);
+  /* Only the travel eases. The pill's SIZE must not, because the grid columns
+     it sits over resize in one step with --tab-count — a transition here puts
+     the pill on a different timeline from the tabs and it visibly trails them
+     (measured: ~45px adrift for the first frames). */
+  transition:
+    transform var(--tabs-dur) var(--ease),
+    background var(--base) var(--ease);
 }
+
+/* While the bar is resizing, the pill's travel must not ease either: its
+   position is a percentage of a width that is already animating, so easing on
+   top of that is the same lag again. Dropped once the resize has finished, so
+   moving between tabs at a fixed width still glides. */
+.tabs.is-resizing::before { transition: none; }
 
 .tab {
   position: relative;
-  z-index: 1;
-  padding: 9px 22px;
+  z-index: 2;
+  /* Mid-flight the bar is briefly too narrow for six labels. Clipping keeps
+     them inside their own column instead of overlapping their neighbours. */
+  overflow: hidden;
+  padding: 6px 13px;
   border: none;
-  border-radius: var(--r-md);
+  border-radius: calc(var(--r-md) - 2px);
   background: none;
   color: var(--text-2);
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   font-weight: 620;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
   cursor: pointer;
-  transition: color var(--base) var(--ease);
+  transition:
+    color var(--base) var(--ease),
+    background var(--base) var(--ease);
 }
-.tab:hover { color: var(--text); }
+/* Both of these have to out-specify the global `button:hover` rule, which
+   would otherwise fill every tab with the accent — making a merely hovered
+   tab look identical to the selected one. */
+.tab:not(.active):hover { background: var(--tab-hover); color: var(--text); }
+/* The active tab sits on top of the pill, so any fill here would hide it.
+   Its hover reads on the pill itself instead. */
+.tab.active:hover { background: none; }
+.tabs:has(.tab.active:hover)::before { background: var(--accent-hover); }
 .tab.active { color: var(--accent-contrast); }
+
+/* The one tab standing in for all four suit types. */
+.tab.tab-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  /* Trimmed on the right so the caret, not empty space, ends the chip. */
+  padding-right: 9px;
+}
+.tab-chip-caret {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  opacity: 0.65;
+}
+.tab.tab-chip:hover .tab-chip-caret { opacity: 1; }
+
+/* The three suits revealed by expanding the chip. The one already active was
+   on screen a moment ago as the chip, so it is left out of the cascade.
+   They fade in over the same window the bar takes to widen, staggered
+   outwards from the chip, so labels arrive as their room does rather than
+   sitting cramped and waiting for it. */
+.tab.tab-spread:not(.active) {
+  animation: tab-in var(--tabs-dur) var(--ease) both;
+  animation-delay: calc(var(--spread-i, 0) * 45ms);
+}
+@keyframes tab-in {
+  from { opacity: 0; }
+  60%  { opacity: 0.25; }
+  to   { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tab.tab-spread:not(.active) { animation: none; }
+}
 
 /* ------------------------------------------------------------------ panel */
 /* Fills the content column; the rows scroll, the pager stays pinned. */
@@ -1254,7 +1353,8 @@ table.inner tbody tr:hover td { background: var(--surface-2); }
     padding: 10px 14px;
   }
   .tabs { grid-row: 2; grid-column: 1 / -1; width: 100%; min-width: 0; }
-  .tab { padding: 9px 10px; }
+  .tab { padding: 7px 8px; }
+  .tab.tab-chip { padding-right: 6px; }
   .brand h1 { font-size: 0.9375rem; }
   /* The date pill costs more width than it earns next to a wrapped nav. */
   .topbar-right .total { display: none; }
