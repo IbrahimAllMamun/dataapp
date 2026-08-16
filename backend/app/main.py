@@ -15,7 +15,7 @@ from .database import engine
 from .sync import run_sync
 from .filters import (
     build_filters, build_error_filters, where_clause, ERROR_TYPES,
-    LAW_FIRM_LABEL, VALID_FILING,
+    LAW_FIRM_LABEL, VALID_FILING, WARRANT_STATES, WARRANT_PENDING,
 )
 
 log = logging.getLogger("api")
@@ -150,7 +150,9 @@ DEFAULTS = {
     "upcoming": "All",
     "products": ["SME"],
     "statuses": ["Active"],
-    "warrant": False,
+    # "All" rather than False: the warrant filter is a three-way choice now.
+    "warrant": "All",
+    "warrant_year": "All",
     "q": "",
 }
 
@@ -198,6 +200,21 @@ def get_filter_options(suit: str | None = None):
                 "SELECT DISTINCT product_category_label FROM litigation_cases "
                 "WHERE product_category_label IS NOT NULL "
                 "ORDER BY product_category_label"))]
+            # Newest first: the recent years are the ones anyone asks about.
+            # Missing table (a warehouse synced before this existed) is not
+            # worth a 503 — the rest of the panel still works without it.
+            try:
+                warrant_years = [r[0] for r in conn.execute(text(
+                    "SELECT DISTINCT warrant_year FROM warrant_executions "
+                    "ORDER BY warrant_year DESC"))]
+                warrant_states = WARRANT_STATES
+            except Exception:
+                # A warehouse synced before this table existed. Pending still
+                # works — it reads present_case_status — so offer only that,
+                # rather than an option that would 503 when chosen.
+                log.warning("warrant_executions missing; run a sync to build it")
+                warrant_years = []
+                warrant_states = [WARRANT_PENDING]
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Data not ready: {e}")
 
@@ -205,6 +222,8 @@ def get_filter_options(suit: str | None = None):
         "branches": branches,
         "statuses": statuses,
         "products": products,
+        "warrant_states": warrant_states,
+        "warrant_years": warrant_years,
         # Fixed, ordered by urgency — not data-derived, so empty buckets still show.
         "upcoming": ["No Date", "Not Updated", "Today", "Next 5 Working Days",
                      "This Month", "Next Month", "Later"],
@@ -219,7 +238,10 @@ def get_cases(
     upcoming: str | None = Query(None),
     products: list[str] | None = Query(None),
     statuses: list[str] | None = Query(None),
-    warrant: bool = Query(False),
+    # A warrant state — see filters.WARRANT_STATES. Was a bool; anything
+    # unrecognised (including the old "true") simply applies no constraint.
+    warrant: str | None = Query(None),
+    warrant_year: int | None = Query(None),
     q: str | None = Query(None),
     # Set by the summary drill-down to narrow to one present_case_status.
     case_status: str | None = Query(None),
@@ -231,7 +253,8 @@ def get_cases(
     offset = (page - 1) * page_size
     where, params = build_filters(suit=suit, branch=branch, upcoming=upcoming,
                                   products=products, statuses=statuses,
-                                  warrant=warrant, q=q, case_status=case_status,
+                                  warrant=warrant, warrant_year=warrant_year,
+                                  q=q, case_status=case_status,
                                   law_firm=law_firm)
     # The filing-date guards belong to BOTH queries below. They used to be a
     # hardcoded tail on the page query only, so COUNT reported more cases than

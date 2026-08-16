@@ -220,6 +220,7 @@ def run_sync():
     transaction so the DB is never left empty or half-loaded."""
     started = datetime.now()
     log.info("sync started")
+    log.info("sync literally started")
 
     # 1. Extract everything FIRST. If a MSSQL read fails, Postgres is untouched.
     frames = {}
@@ -264,6 +265,49 @@ def run_sync():
         conn.execute(text("CREATE INDEX ix_cases_status    ON litigation_cases (litigationstatus)"))
         conn.execute(text("CREATE INDEX ix_cases_prodlabel ON litigation_cases (product_category_label)"))
         log.info("created indexes")
+
+        # One row per executed warrant: the case, and the YEAR it was executed
+        # in. A warrant counts as executed once a hearing that is NOT a warrant
+        # follows it — a warrant hearing followed by another warrant hearing is
+        # the same warrant still standing, not a second one.
+        #
+        # Precomputed because it cannot be answered cheaply per request: the
+        # window pass over ~180k history rows takes ~500ms and no index helps,
+        # since the per-date bool_or has to read every row anyway. Here it is
+        # paid once a sync; at query time it is a semi-join against ~12k rows.
+        #
+        # strpos rather than ILIKE '%warrant%' so no literal % goes anywhere
+        # near a parameterised statement.
+        conn.execute(text("DROP TABLE IF EXISTS warrant_executions"))
+        conn.execute(text("""
+            CREATE TABLE warrant_executions AS
+            WITH per_date AS (
+                -- A date, not a row: a case can carry several statuses on the
+                -- same hearing date, and the date is a warrant date if any of
+                -- them is.
+                SELECT caseid, hearing_date,
+                       bool_or(strpos(lower(case_status), 'warrant') > 0) AS is_warrant
+                FROM litigation_history
+                GROUP BY caseid, hearing_date
+            ), seq AS (
+                SELECT caseid, is_warrant,
+                       LEAD(hearing_date) OVER w AS next_date,
+                       LEAD(is_warrant)   OVER w AS next_is_warrant
+                FROM per_date
+                WINDOW w AS (PARTITION BY caseid ORDER BY hearing_date)
+            )
+            SELECT DISTINCT caseid,
+                   EXTRACT(YEAR FROM next_date)::int AS warrant_year
+            FROM seq
+            WHERE is_warrant
+              AND next_date IS NOT NULL
+              AND NOT next_is_warrant
+        """))
+        conn.execute(text(
+            "CREATE INDEX ix_warrexec_year ON warrant_executions (warrant_year, caseid)"))
+        conn.execute(text(
+            "CREATE INDEX ix_warrexec_case ON warrant_executions (caseid)"))
+        log.info("built warrant_executions")
 
     log.info("sync finished in %.1fs", (datetime.now() - started).total_seconds())
 

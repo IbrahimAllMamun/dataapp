@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import CaseDetails from "./CaseDetails.jsx";
-import Filters from "./Filters.jsx";
+import Filters, { WARRANT_EXECUTED } from "./Filters.jsx";
 import NameCell from "./NameCell.jsx";
 import Summary from "./Summary.jsx";
 import CaseListModal from "./CaseListModal.jsx";
@@ -35,7 +35,7 @@ const TABS = [
   { key: "ARAE", suit: "ARAE" },
   { key: "Others", suit: "Others" },
   // Data-quality exceptions, not a suit.
-  { key: "Invalid Data", errors: true },
+  { key: "Inavalid Data", errors: true },
 ];
 
 // The four suit tabs collapse into a single chip in the nav. Its position in
@@ -56,7 +56,10 @@ const DEFAULT_FILTERS = {
   upcoming: "All",
   products: ["SME"],
   statuses: ["Active"],
-  warrant: false,
+  // Three-way now: "All" | "Pending Warrant" | "Warrant Executed". The year
+  // only applies to the executed state.
+  warrant: "All",
+  warrantYear: "All",
   q: "",
   firm: "",
 };
@@ -250,7 +253,14 @@ export default function App() {
       qs.set("branch", filters.branch);
     if (filters.upcoming && filters.upcoming !== "All")
       qs.set("upcoming", filters.upcoming);
-    if (filters.warrant) qs.set("warrant", "true");
+    if (filters.warrant && filters.warrant !== "All") {
+      qs.set("warrant", filters.warrant);
+      // Only meaningful for the executed state, and Filters clears it on any
+      // other choice — but do not send a stale one even if that changes.
+      if (filters.warrant === WARRANT_EXECUTED &&
+          filters.warrantYear && filters.warrantYear !== "All")
+        qs.set("warrant_year", filters.warrantYear);
+    }
     if (filters.q) qs.set("q", filters.q);
     // Repeated keys -> FastAPI list params.
     filters.products.forEach((p) => qs.append("products", p));

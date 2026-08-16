@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import MultiSelect from "./MultiSelect.jsx";
-import { CheckIcon, CloseIcon, SearchIcon } from "./icons.jsx";
+import { CloseIcon, SearchIcon } from "./icons.jsx";
 
 /**
  * Filter panel.
@@ -11,18 +11,9 @@ import { CheckIcon, CloseIcon, SearchIcon } from "./icons.jsx";
  * the reset view can never drift apart.
  */
 
-/** Checkbox styled as a toggle chip. The native input stays for a11y. */
-function Chip({ checked, onChange, children }) {
-  return (
-    <label className="check">
-      <input type="checkbox" checked={checked} onChange={onChange} />
-      <span className="box" aria-hidden="true">
-        <CheckIcon />
-      </span>
-      {children}
-    </label>
-  );
-}
+// Must match filters.WARRANT_EXECUTED on the API — it is the one state that
+// takes a year.
+export const WARRANT_EXECUTED = "Warrant Executed";
 
 /** Which controls a tab wants. Anything omitted defaults to shown. */
 const ALL = {
@@ -214,15 +205,44 @@ export default function Filters({
         )}
 
         {show.warrant && (
-          <fieldset className="filter checks">
-            <legend>Warrant</legend>
-            <Chip
-              checked={value.warrant}
-              onChange={(e) => set({ warrant: e.target.checked })}
+          <label className="filter">
+            <span>Warrant</span>
+            <select
+              value={value.warrant}
+              onChange={(e) =>
+                // Reset the year alongside the state: a year left over from a
+                // previous "Warrant Executed" would otherwise be sent again
+                // the moment it is re-selected.
+                set({ warrant: e.target.value, warrantYear: "All" })
+              }
             >
-              Warrant cases only
-            </Chip>
-          </fieldset>
+              <option value="All">All</option>
+              {(options.warrant_states ?? []).map((w) => (
+                <option key={w} value={w}>
+                  {w}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        {/* Only an executed warrant has a year to narrow by — a pending one
+            has not happened yet. */}
+        {show.warrant && value.warrant === WARRANT_EXECUTED && (
+          <label className="filter">
+            <span>Year of Warrant</span>
+            <select
+              value={value.warrantYear}
+              onChange={(e) => set({ warrantYear: e.target.value })}
+            >
+              <option value="All">All</option>
+              {(options.warrant_years ?? []).map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+          </label>
         )}
 
         <div className="filter actions">

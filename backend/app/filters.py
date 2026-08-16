@@ -33,10 +33,16 @@ VALID_FILING = [
 # Buckets that must be matched by date flag rather than by label.
 _MONTH_FLAG = {"This Month": "in_this_month", "Next Month": "in_next_month"}
 
+# The two warrant states the filter offers. Anything else — including the old
+# boolean "true" — means no warrant constraint at all.
+WARRANT_PENDING = "Pending Warrant"
+WARRANT_EXECUTED = "Warrant Executed"
+WARRANT_STATES = [WARRANT_PENDING, WARRANT_EXECUTED]
+
 
 def build_filters(suit=None, branch=None, upcoming=None, products=None,
-                  statuses=None, warrant=False, q=None, case_status=None,
-                  law_firm=None, firm_q=None):
+                  statuses=None, warrant=None, q=None, case_status=None,
+                  law_firm=None, firm_q=None, warrant_year=None):
     """Return (list_of_sql_conditions, params_dict)."""
     where, params = [], {}
 
@@ -94,8 +100,22 @@ def build_filters(suit=None, branch=None, upcoming=None, products=None,
         where.append(f"{LAW_FIRM_LABEL} ILIKE :firm_q")
         params["firm_q"] = f"%{firm_q}%"
 
-    if warrant:
+    # Warrants come in two states, and a case can be in both at once (269 are,
+    # in the current data): a warrant executed years ago and another standing
+    # today. They are therefore separate predicates, not a partition.
+    if warrant == WARRANT_PENDING:
+        # is_warrant is derived in derive.py from present_case_status.
         where.append("is_warrant IS TRUE")
+    elif warrant == WARRANT_EXECUTED:
+        # warrant_executions is built by sync.py — one row per case per year in
+        # which a warrant was executed. See the comment there for the rule.
+        if warrant_year:
+            where.append(
+                "caseid IN (SELECT caseid FROM warrant_executions "
+                "WHERE warrant_year = :warrant_year)")
+            params["warrant_year"] = int(warrant_year)
+        else:
+            where.append("caseid IN (SELECT caseid FROM warrant_executions)")
 
     if q:
         # Cascading search box: one term matched against client / CIF / account.
