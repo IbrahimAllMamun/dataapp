@@ -132,7 +132,7 @@ async def lifespan(app: FastAPI):
     scheduler.shutdown(wait=False)
 
 
-app = FastAPI(title="Litigation Dashboard API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="IDLC Litigation Dashboard API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
