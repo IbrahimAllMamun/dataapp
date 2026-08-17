@@ -29,8 +29,8 @@ SessionLocal_idlc = sessionmaker(autocommit=False, autoflush=False, bind=engine_
 # NOTE: this connects to the `db` service over the Docker network, where
 # Postgres always listens on 5432 regardless of the host-side port mapping
 # (${POSTGRES_PORT}). Do NOT use the host port here.
-pg_host = os.getenv("POSTGRES_HOST", "db")
-pg_port = int(os.getenv("POSTGRES_INTERNAL_PORT", "5432"))
+pg_host = os.getenv("POSTGRES_HOST", "")
+pg_port = int(os.getenv("POSTGRES_PORT", "5432"))
 pg_database = os.getenv("POSTGRES_DB", "")
 pg_username = os.getenv("POSTGRES_USER", "")
 pg_password = os.getenv("POSTGRES_PASSWORD", "")

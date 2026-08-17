@@ -1,16 +1,17 @@
-import asyncio
 import logging
-from contextlib import asynccontextmanager
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import text
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+
+import asyncio
+from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
+from sqlalchemy import text
 from .database import engine
 from .sync import run_sync
 from .filters import (
@@ -99,7 +100,7 @@ async def lifespan(app: FastAPI):
 
     scheduler.add_job(
         run_sync_async,
-        CronTrigger(hour=10, minute=20, second=0),  # 09:20 UTC = 15:20 Dhaka
+        CronTrigger(hour=6, minute=0, second=0),  # 09:20 UTC = 15:20 Dhaka
         id="daily_sync",
         max_instances=1,
         coalesce=True,

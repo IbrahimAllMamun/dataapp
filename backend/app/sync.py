@@ -220,7 +220,6 @@ def run_sync():
     transaction so the DB is never left empty or half-loaded."""
     started = datetime.now()
     log.info("sync started")
-    log.info("sync literally started")
 
     # 1. Extract everything FIRST. If a MSSQL read fails, Postgres is untouched.
     frames = {}
