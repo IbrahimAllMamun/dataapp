@@ -25,7 +25,7 @@ overlap:
 | Trigger | When |
 | --- | --- |
 | Boot | Once, on API startup |
-| Daily | **10:20 Asia/Dhaka** (`CronTrigger` in `main.py`) |
+| Daily | **06:00 Asia/Dhaka** (`CronTrigger` in `main.py`) |
 | Hourly catch-up | Every hour; a no-op unless `MAX(reportpreparationdate)` is behind today |
 
 The catch-up exists because the daily job can only fire if the process
@@ -50,6 +50,10 @@ Notes on `.env`:
   is only the **host** port for tools like DBeaver — the API always reaches
   Postgres on 5432 inside the Docker network, so changing it does not affect
   the app.
+- **Ports** (`API_PORT`, `FRONTEND_PORT`): used on BOTH sides of their compose
+  mapping, because uvicorn and vite each bind them inside the container too.
+  Change either and the URLs below move with it; vite proxies to
+  `http://api:${API_PORT}`, so the two stay in step.
 
 ## Run
 
@@ -57,8 +61,8 @@ Notes on `.env`:
 docker compose up --build
 ```
 
-- Frontend: http://localhost:5173
-- API health: http://localhost:8000/api/health
+- Frontend: http://localhost:5173 (`FRONTEND_PORT`)
+- API health: http://localhost:8000/api/health (`API_PORT`)
 - API docs: http://localhost:8000/docs
 
 On first boot the API kicks off a sync immediately. Until it finishes, the
@@ -186,6 +190,11 @@ it, so they cannot drift apart.
 - **`caseid` is not unique** in `litigation_cases` (one fully duplicated row
   in the current data), so anything keyed on it needs `DISTINCT` or a
   composite key.
+- **`POSTGRES_HOST` and `POSTGRES_PORT` are not the API's connection.** Inside
+  compose the API reaches Postgres at `db:5432` — the service name and the
+  container port. `POSTGRES_PORT` is the host-side mapping only, and
+  `POSTGRES_INTERNAL_PORT` is the override for running the app outside Docker.
+  Pointing the engine at `POSTGRES_PORT` breaks as soon as that is not 5432.
 - **Adding the warrant filter needs a sync.** `warrant_executions` is built by
   `sync.py`; on a warehouse loaded before it existed, the filter offers only
   "Pending Warrant" rather than an option that would 503.

@@ -100,7 +100,10 @@ async def lifespan(app: FastAPI):
 
     scheduler.add_job(
         run_sync_async,
-        CronTrigger(hour=6, minute=0, second=0),  # 09:20 UTC = 15:20 Dhaka
+        # 06:00 in the CONTAINER's timezone, which docker-compose sets to
+        # Asia/Dhaka. A CronTrigger built without an explicit timezone takes
+        # the local one at construction — it does NOT inherit the scheduler's.
+        CronTrigger(hour=6, minute=0, second=0),
         id="daily_sync",
         max_instances=1,
         coalesce=True,

@@ -23,4 +23,8 @@ USER appuser
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Shell form so ${API_PORT} is expanded at runtime. compose maps
+# "${API_PORT}:${API_PORT}" and vite proxies to http://api:${API_PORT}, so
+# both sides expect uvicorn to BIND that port — with it hardcoded to 8000,
+# setting API_PORT to anything else left nothing listening behind the mapping.
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${API_PORT:-8000} --reload
