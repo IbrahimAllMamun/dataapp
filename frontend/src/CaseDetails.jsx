@@ -57,6 +57,70 @@ function HistoryTable({ columns, rows }) {
   );
 }
 
+/**
+ * Every case this client holds, with the open one marked. Same columns for
+ * every row, so it reuses the inner-table look rather than inventing a third
+ * one; rows carry the row-click affordance the main table uses.
+ */
+function RelatedTable({ columns, rows, currentId, onPick }) {
+  if (!rows?.length) return <p className="muted">No cases for this client.</p>;
+
+  return (
+    <div className="table-scroll">
+      <table className="inner related">
+        <thead>
+          <tr>
+            {columns.map((c) => (
+              <th key={c} className={isNumericColumn(c) ? "num" : undefined}>
+                {LABELS[c] ?? c}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => {
+            // Loose equality: the id arrives as a number here and can reach
+            // the component as a string from a row click.
+            const isCurrent = String(row.caseid) === String(currentId);
+            const open = () => !isCurrent && onPick(row.caseid);
+            return (
+            <tr
+              // caseid is not unique in litigation_cases — one row is a full
+              // duplicate — so the index rides along to keep keys distinct.
+              key={`${row.caseid}-${i}`}
+              className={isCurrent ? "is-current" : "row-click"}
+              aria-current={isCurrent ? "true" : undefined}
+              tabIndex={isCurrent ? undefined : 0}
+              onClick={open}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  open();
+                }
+              }}
+            >
+              {columns.map((c) => (
+                <td key={c} className={isNumericColumn(c) ? "num" : undefined}>
+                  {c === "litigationstatus" ? (
+                    <span
+                      className={`badge ${row[c] === "Active" ? "active" : "inactive"}`}
+                    >
+                      {formatCell(c, row[c])}
+                    </span>
+                  ) : (
+                    formatCell(c, row[c])
+                  )}
+                </td>
+              ))}
+            </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 /** Placeholder grid shown while the case payload is in flight. */
 function DetailSkeleton() {
   return (
@@ -78,7 +142,7 @@ function DetailSkeleton() {
   );
 }
 
-export default function CaseDetails({ caseId, onClose }) {
+export default function CaseDetails({ caseId, onClose, onOpenCase }) {
   const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -96,7 +160,11 @@ export default function CaseDetails({ caseId, onClose }) {
     const ctrl = new AbortController();
     setLoading(true);
     setError(null);
-    setDetails(null);
+    // Deliberately NOT clearing `details`: following one of the client's other
+    // cases updates this card in place, and blanking it collapses the body so
+    // the browser clamps the scroll back to the top — which threw the very
+    // list being clicked off screen. The old card stays, dimmed, until the new
+    // one lands (a few ms).
 
     fetch(`/api/case?caseid=${encodeURIComponent(caseId)}`, { signal: ctrl.signal })
       .then(async (res) => {
@@ -179,7 +247,12 @@ export default function CaseDetails({ caseId, onClose }) {
         </div>
 
         <div className="modal-body">
-          {loading && <DetailSkeleton />}
+          {/* Only the FIRST load has nothing to show; later ones keep the
+              previous card on screen behind a progress bar. */}
+          {loading && !details && <DetailSkeleton />}
+          {loading && details && (
+            <div className="loadbar" role="status" aria-label="Loading" />
+          )}
 
           {error && (
             <div className="error" role="alert" style={{ marginTop: 16 }}>
@@ -191,7 +264,12 @@ export default function CaseDetails({ caseId, onClose }) {
           )}
 
           {details && (
-            <>
+            <div
+              style={{
+                opacity: loading ? 0.55 : 1,
+                transition: "opacity 160ms var(--ease)",
+              }}
+            >
               <section>
                 <h3>Legal</h3>
                 <FieldGrid {...details.legal} />
@@ -211,7 +289,22 @@ export default function CaseDetails({ caseId, onClose }) {
                 </h3>
                 <HistoryTable {...details.history} />
               </section>
-            </>
+
+              <section>
+                <h3>
+                  Cases for This Client
+                  <span className="count">
+                    {details.related?.rows?.length ?? 0}
+                  </span>
+                </h3>
+                <RelatedTable
+                  columns={details.related?.columns ?? []}
+                  rows={details.related?.rows ?? []}
+                  currentId={caseId}
+                  onPick={(id) => onOpenCase?.(id)}
+                />
+              </section>
+            </div>
           )}
         </div>
       </div>

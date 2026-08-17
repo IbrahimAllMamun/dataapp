@@ -169,6 +169,11 @@ _LEGAL_COLS = ["caseid", "nature_of_suit","suit_value","suit_filing_date","law_f
                "court_no","plaintiff","plaintiffcif","next_hearing_date",
                "cheque_number","litigation_receivable","aging","present_case_status",
                "litigationstatus"]
+# The client's case list under a case's history. Deliberately short: enough
+# to tell one suit from another at a glance, not a second copy of the table.
+_RELATED_COLS = ["caseid", "nature_of_suit", "suit_filing_date",
+                 "present_case_status", "litigationstatus"]
+
 _LOAN_COLS = ["accountnumber", "product_category", "stmcode", "stmname", "rmcode",
               "rmname", "monitorbycode", "monitorby", "urpa", "mod",
               "overdue_amount", "principal_od", "interest_od", "lpi",
@@ -323,6 +328,28 @@ def get_case_details(caseid: int):
                 {"caseid": caseid},
             )
             history_columns, history_rows = _rows(history)
+
+            # EVERY case this client holds, the open one included — the client
+            # is browsing their book, and dropping the row they are looking at
+            # leaves them no anchor in it. The UI marks which one is current.
+            # Newest suit first, the same ordering the cases table uses.
+            #
+            # DISTINCT because litigation_cases is not unique on caseid: one
+            # case (4126) is a fully duplicated row in the current data, and
+            # without this it would appear twice in its own client's list.
+            cif = case_rows[0].get("cif") if case_rows else None
+            related_columns, related_rows = _RELATED_COLS, []
+            if cif is not None and str(cif).strip() != "":
+                related = conn.execute(
+                    text(f"""
+                        SELECT DISTINCT {", ".join(_RELATED_COLS)}
+                        FROM litigation_cases
+                        WHERE cif = :cif
+                        ORDER BY suit_filing_date DESC NULLS LAST, caseid
+                    """),
+                    {"cif": cif},
+                )
+                related_columns, related_rows = _rows(related)
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Data not ready: {e}")
 
@@ -339,6 +366,7 @@ def get_case_details(caseid: int):
         "legal":   {"columns": _LEGAL_COLS,   "rows": legal_rows},
         "loan":    {"columns": _LOAN_COLS,    "rows": loan_rows},
         "history": {"columns": history_columns, "rows": history_rows},
+        "related": {"columns": related_columns, "rows": related_rows},
     }
 
 

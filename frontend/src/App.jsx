@@ -921,7 +921,14 @@ export default function App() {
       )}
 
       {openCaseId !== null && (
-        <CaseDetails caseId={openCaseId} onClose={() => setOpenCaseId(null)} />
+        <CaseDetails
+          caseId={openCaseId}
+          onClose={() => setOpenCaseId(null)}
+          // Following a client's other case swaps this dialog's contents
+          // rather than stacking a second one — the drill-down list, if there
+          // is one, stays underneath and is still what Escape returns to.
+          onOpenCase={setOpenCaseId}
+        />
       )}
     </div>
   );
