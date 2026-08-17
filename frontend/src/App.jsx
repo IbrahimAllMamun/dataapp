@@ -76,6 +76,23 @@ const prefersReducedMotion = () =>
   typeof window !== "undefined" &&
   window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
+/** Live media-query match. Re-renders when the viewport crosses it. */
+function useMediaQuery(query) {
+  const [matches, setMatches] = useState(
+    () => typeof window !== "undefined" && window.matchMedia(query).matches,
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const sync = () => setMatches(mq.matches);
+    sync(); // the viewport may have moved between first render and here
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, [query]);
+
+  return matches;
+}
+
 /** Light/dark, persisted. index.html stamps the initial value before paint. */
 function useTheme() {
   const [theme, setTheme] = useState(
@@ -131,7 +148,12 @@ export default function App() {
   // four are currently spread out for picking.
   const [lastSuitKey, setLastSuitKey] = useState(DEFAULT_SUIT_KEY);
   const [suitExpanded, setSuitExpanded] = useState(false);
+  // Narrow viewports cannot spread seven tabs across a row: the bar had to
+  // scroll, which showed a scrollbar inside the nav and left the picker half
+  // off-screen. Below this the four suits drop DOWN as a menu instead.
+  const stackSuits = useMediaQuery("(max-width: 725px)");
   const tabsRef = useRef(null);
+  const suitMenuRef = useRef(null);
   // Last settled width of the tab bar, so a change has a start to ease from.
   const navWidthRef = useRef(null);
   const resizeTimerRef = useRef(null);
@@ -324,7 +346,7 @@ export default function App() {
   const onChipClick = useCallback(() => {
     // Already on that suit: clicking again spreads out all four to pick a
     // different one. Not on it: jump straight back to the last one shown.
-    if (tab.suit) setSuitExpanded(true);
+    if (tab.suit) setSuitExpanded((open) => !open);
     else selectTab(chipTab);
   }, [tab.suit, chipTab, selectTab]);
 
@@ -334,9 +356,9 @@ export default function App() {
     if (!suitExpanded) return;
 
     const onDocPointer = (e) => {
-      if (tabsRef.current && !tabsRef.current.contains(e.target)) {
-        setSuitExpanded(false);
-      }
+      const inBar = tabsRef.current?.contains(e.target);
+      const inMenu = suitMenuRef.current?.contains(e.target);
+      if (!inBar && !inMenu) setSuitExpanded(false);
     };
     const onKey = (e) => e.key === "Escape" && setSuitExpanded(false);
 
@@ -350,9 +372,10 @@ export default function App() {
 
   // What actually renders: the four suit tabs replaced by one chip, unless
   // spread out. TABS keeps Summary and Invalid Data either side of it.
-  const visibleTabs = suitExpanded
-    ? TABS
-    : TABS.filter((t) => !t.suit || t.key === chipTab.key);
+  const visibleTabs =
+    suitExpanded && !stackSuits
+      ? TABS
+      : TABS.filter((t) => !t.suit || t.key === chipTab.key);
 
   // The bar is content-sized, so expanding the chip changes its width in one
   // step. Everything inside is a percentage of that width — the grid's equal
@@ -382,20 +405,38 @@ export default function App() {
       // Measured rather than hardcoded because it moves whenever a tab is
       // renamed: "Errors" to "Invalid Data" took the bar from 396px to 451px.
       nav.style.setProperty("--tab-min", "0px");
+      const widest = () =>
+        Math.max(
+          0,
+          ...[...nav.querySelectorAll(".tab")].map(
+            (t) => t.getBoundingClientRect().width,
+          ),
+        );
+
       nav.style.width = "max-content";
-      const colMin = Math.max(
-        0,
-        ...[...nav.querySelectorAll(".tab")].map(
-          (t) => t.getBoundingClientRect().width,
-        ),
-      );
-      nav.style.setProperty("--tab-min", `${Math.ceil(colMin)}px`);
+      const whole = Math.ceil(widest()); // the label on one line
 
       // Then the width the bar should actually take, with the floor applied.
       // auto here on purpose: it stops at the space available, and anything
       // the floor pushes past that scrolls instead of stretching the bar.
+      nav.style.setProperty("--tab-min", `${whole}px`);
       nav.style.width = "auto";
-      const to = nav.getBoundingClientRect().width;
+      let to = nav.getBoundingClientRect().width;
+
+      // Whole labels are the preference, but not at the cost of hiding one.
+      // Where the stylesheet lets them wrap (the narrow end), dropping the
+      // floor lets the columns divide the bar exactly and the long labels take
+      // a second line — at 360px the four collapsed tabs wanted 346px of a
+      // 330px bar, which pushed "Invalid Data" out of sight. Where they cannot
+      // wrap, the floor stays and the bar scrolls: squeezing a nowrap label
+      // only clips it.
+      const first = nav.querySelector(".tab");
+      const canWrap =
+        first && getComputedStyle(first).whiteSpace !== "nowrap";
+      if (canWrap && nav.scrollWidth > nav.clientWidth + 1) {
+        nav.style.setProperty("--tab-min", "0px");
+        to = nav.getBoundingClientRect().width;
+      }
 
       if (fluid) {
         // Full-width down here: the stylesheet sets the width, but the floor
@@ -525,9 +566,13 @@ export default function App() {
             }}
           >
             {visibleTabs.map((t) => {
-              // Stands in for all four suits while they are collapsed.
-              const isChip = !suitExpanded && !!t.suit;
-              const isSpread = suitExpanded && !!t.suit;
+              // The chip stands in for all four suits whenever they are not
+              // spread along the bar — including while the stacked menu is
+              // open, where they are spread downwards instead. Without this
+              // the chip lost its caret and its toggle mid-interaction.
+              const barCollapsed = !suitExpanded || stackSuits;
+              const isChip = barCollapsed && !!t.suit;
+              const isSpread = !barCollapsed && !!t.suit;
               return (
                 <button
                   key={t.key}
@@ -564,6 +609,31 @@ export default function App() {
               );
             })}
           </nav>
+
+          {/* The same choice, dropped downwards. Rendered outside the bar on
+              purpose: the bar is a scroll container, and an absolutely
+              positioned child of one gets clipped by it. */}
+          {stackSuits && suitExpanded && (
+            <div
+              className="suit-menu"
+              ref={suitMenuRef}
+              role="menu"
+              aria-label="Suit type"
+            >
+              {SUIT_TABS.map((t, i) => (
+                <button
+                  key={t.key}
+                  role="menuitemradio"
+                  aria-checked={t.key === tab.key}
+                  className={`suit-menu-item${t.key === tab.key ? " active" : ""}`}
+                  style={{ "--menu-i": i }}
+                  onClick={() => selectTab(t)}
+                >
+                  {t.key}
+                </button>
+              ))}
+            </div>
+          )}
 
           <div className="topbar-right">
             {reportdate && (

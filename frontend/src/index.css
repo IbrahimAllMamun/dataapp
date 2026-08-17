@@ -275,6 +275,9 @@ body::before {
 }
 
 .topbar-inner {
+  /* Anchors the stacked suit menu, which cannot live inside the scrolling
+     tab bar without being clipped by it. */
+  position: relative;
   display: grid;
   /* Equal side columns are what actually centres the tabs, rather than
      letting them drift with the width of the brand text. */
@@ -431,6 +434,9 @@ body::before {
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-x: contain;
+  /* Scrollable, but with no visible track: the global 10px scrollbar inside a
+     38px-tall bar reads as something broken rather than as an affordance. */
+  scrollbar-width: none;
   gap: 0;
   /* App.jsx overrides this with an explicit px width so expanding the suit
      chip can ease rather than jump. Everything inside is sized as a
@@ -448,7 +454,60 @@ body::before {
     width var(--tabs-dur) var(--ease),
     border-color var(--base) var(--ease);
 }
+.tabs::-webkit-scrollbar { display: none; }
 .tabs:hover { border-color: var(--line-strong); }
+
+/* ------------------------------------------------- stacked suit picker */
+/* Below 725px the four suits drop down as a menu instead of spreading along
+   the bar — seven columns there meant a scrolling, half-hidden picker. */
+.suit-menu {
+  position: absolute;
+  z-index: 70;
+  top: calc(100% - 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 210px;
+  max-width: min(280px, calc(100vw - 28px));
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  animation: menu-in 180ms var(--ease-out) both;
+}
+@keyframes menu-in {
+  from { opacity: 0; transform: translate(-50%, -6px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.suit-menu-item {
+  padding: 11px 12px;
+  border: none;
+  border-radius: calc(var(--r-md) - 3px);
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 620;
+  text-align: left;
+  cursor: pointer;
+  animation: fade 160ms var(--ease) both;
+  animation-delay: calc(var(--menu-i, 0) * 25ms);
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+/* Out-specifies the global button:hover, which would fill it with the accent
+   and make a hovered row look like the selected one. */
+.suit-menu-item:not(.active):hover { background: var(--tab-hover); color: var(--text); }
+.suit-menu-item.active,
+.suit-menu-item.active:hover { background: var(--accent); color: var(--accent-contrast); }
+
+@media (prefers-reduced-motion: reduce) {
+  .suit-menu { animation: none; }
+  .suit-menu-item { animation: none; }
+}
 
 /* The suit types, banded together while they are spread out, so the four of
    them read as one group rather than as peers of Summary and Errors. Sized
@@ -552,6 +611,12 @@ body::before {
   opacity: 0.65;
 }
 .tab.tab-chip:hover .tab-chip-caret { opacity: 1; }
+/* Points up while the stacked menu is open, so the chip reads as a toggle. */
+.tab.tab-chip[aria-expanded="true"] .tab-chip-caret {
+  opacity: 1;
+  transform: rotate(180deg);
+}
+.tab-chip-caret { transition: transform var(--base) var(--ease), opacity var(--fast) var(--ease); }
 
 /* The three suits revealed by expanding the chip. The one already active was
    on screen a moment ago as the chip, so it is left out of the cascade.
