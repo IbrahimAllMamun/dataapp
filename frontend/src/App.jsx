@@ -62,6 +62,7 @@ const DEFAULT_FILTERS = {
   warrantYear: "All",
   q: "",
   firm: "",
+  plaintiff: "",
 };
 
 const SKELETON_ROWS = 8;
@@ -244,6 +245,8 @@ export default function App() {
         sq.set("upcoming", filters.upcoming);
       filters.products.forEach((p) => sq.append("products", p));
       filters.statuses.forEach((s) => sq.append("statuses", s));
+      if (filters.firm) sq.set("firm", filters.firm);
+      if (filters.plaintiff) sq.set("plaintiff", filters.plaintiff);
 
       fetch(`/api/summary?${sq}`, { signal: ctrl.signal })
         .then(async (res) => {
@@ -699,7 +702,12 @@ export default function App() {
                   : tab.firms
                     ? { search: false, warrant: false, firm: true }
                     : tab.summary
-                      ? { search: false, warrant: false }
+                      ? {
+                          search: false,
+                          warrant: false,
+                          firm: true,
+                          plaintiff: true,
+                        }
                       : undefined
               }
             />

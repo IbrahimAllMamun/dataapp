@@ -457,6 +457,57 @@ body::before {
 .tabs::-webkit-scrollbar { display: none; }
 .tabs:hover { border-color: var(--line-strong); }
 
+/* ------------------------------------------------------- suggestion box */
+/* A filter that offers its known values. The list is absolutely positioned, so
+   the label owns the positioning context. */
+.filter.suggest { position: relative; }
+
+.suggest-list {
+  position: absolute;
+  z-index: 40;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  animation: fade 140ms var(--ease) both;
+}
+
+.suggest-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 9px;
+  border: none;
+  border-radius: calc(var(--r-md) - 4px);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8125rem;
+  text-align: left;
+  cursor: pointer;
+}
+/* Out-specifies the global button:hover, which would fill the row with the
+   accent and read as a selection rather than a hover. */
+.suggest-item.active,
+.suggest-item:hover { background: var(--tab-hover); }
+.suggest-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.suggest-empty { margin: 0; padding: 8px 9px; font-size: 0.8125rem; }
+
 /* ------------------------------------------------- stacked suit picker */
 /* Below 725px the four suits drop down as a menu instead of spreading along
    the bar — seven columns there meant a scrolling, half-hidden picker. */

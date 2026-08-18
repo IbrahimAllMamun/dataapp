@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import MultiSelect from "./MultiSelect.jsx";
+import Suggest from "./Suggest.jsx";
 import { CloseIcon, SearchIcon } from "./icons.jsx";
 
 /**
@@ -23,9 +24,10 @@ const ALL = {
   products: true,
   statuses: true,
   warrant: true,
-  // Law Firms tab only — a separate box from `search`, because it narrows the
-  // firms being aggregated rather than picking out individual cases.
+  // Suggestion boxes. Separate from `search`, which picks out individual cases
+  // by client/CIF/account; these narrow what is being aggregated.
   firm: false,
+  plaintiff: false,
 };
 
 export default function Filters({
@@ -39,7 +41,6 @@ export default function Filters({
   const show = { ...ALL, ...showProp };
   const [options, setOptions] = useState(null);
   const [term, setTerm] = useState(value.q ?? "");
-  const [firmTerm, setFirmTerm] = useState(value.firm ?? "");
 
   // Reload options when the suit changes — branch lists are suit-scoped.
   useEffect(() => {
@@ -56,9 +57,9 @@ export default function Filters({
     return () => ctrl.abort();
   }, [suit]);
 
-  // Keep the search boxes in step when the parent resets filters.
+  // Keep the search box in step when the parent resets filters. The two
+  // suggestion boxes track `value` themselves.
   useEffect(() => setTerm(value.q ?? ""), [value.q]);
-  useEffect(() => setFirmTerm(value.firm ?? ""), [value.firm]);
 
   // Debounce typing so we don't fire a request per keystroke.
   useEffect(() => {
@@ -66,12 +67,6 @@ export default function Filters({
     const id = setTimeout(() => onChange({ ...value, q: term }), 300);
     return () => clearTimeout(id);
   }, [term]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (firmTerm === (value.firm ?? "")) return;
-    const id = setTimeout(() => onChange({ ...value, firm: firmTerm }), 300);
-    return () => clearTimeout(id);
-  }, [firmTerm]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const set = (patch) => onChange({ ...value, ...patch });
 
@@ -93,6 +88,19 @@ export default function Filters({
   // The API orders labels alphabetically, which puts "Other" ahead of "SME".
   // SME is the default selection and the one people scan for, so it leads.
   // Sort is stable, so any other label keeps the server's order.
+  // The suggestion rows: a firm is just its name; a plaintiff carries its CIF
+  // as the hint, and either half matches.
+  const firmOptions = (options.law_firms ?? []).map((f) => ({
+    value: f,
+    label: f,
+  }));
+  const plaintiffOptions = (options.plaintiffs ?? []).map((p) => ({
+    // The name is what reads in the box; the CIF still matches while typing.
+    value: p.name,
+    label: p.name,
+    hint: p.cif,
+  }));
+
   const products = [...options.products].sort(
     (a, b) => (a === "SME" ? 0 : 1) - (b === "SME" ? 0 : 1),
   );
@@ -135,28 +143,23 @@ export default function Filters({
         )}
 
         {show.firm && (
-          <label className="filter grow">
-            <span>Search law firm</span>
-            <div className="search-wrap">
-              <SearchIcon />
-              <input
-                type="search"
-                value={firmTerm}
-                placeholder="Firm name…"
-                onChange={(e) => setFirmTerm(e.target.value)}
-              />
-              {firmTerm && (
-                <button
-                  type="button"
-                  className="search-clear"
-                  onClick={() => setFirmTerm("")}
-                  aria-label="Clear law firm search"
-                >
-                  <CloseIcon />
-                </button>
-              )}
-            </div>
-          </label>
+          <Suggest
+            label="Law Firm"
+            placeholder="Firm name…"
+            value={value.firm}
+            options={firmOptions}
+            onChange={(v) => set({ firm: v })}
+          />
+        )}
+
+        {show.plaintiff && (
+          <Suggest
+            label="Plaintiff"
+            placeholder="Name or CIF…"
+            value={value.plaintiff}
+            options={plaintiffOptions}
+            onChange={(v) => set({ plaintiff: v })}
+          />
         )}
 
         {show.search && (

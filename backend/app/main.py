@@ -209,6 +209,19 @@ def get_filter_options(suit: str | None = None):
                 "SELECT DISTINCT product_category_label FROM litigation_cases "
                 "WHERE product_category_label IS NOT NULL "
                 "ORDER BY product_category_label"))]
+            law_firms = [r[0] for r in conn.execute(text(
+                f"SELECT DISTINCT {LAW_FIRM_LABEL} AS firm FROM litigation_cases "
+                "ORDER BY firm"))]
+            # Name and CIF together: the box matches either, and the suggestion
+            # has to show both or picking one is guesswork.
+            plaintiffs = [
+                {"name": r[0], "cif": r[1]}
+                for r in conn.execute(text(
+                    "SELECT DISTINCT TRIM(plaintiff) AS name, TRIM(plaintiffcif) AS cif "
+                    "FROM litigation_cases "
+                    "WHERE NULLIF(TRIM(plaintiff), '') IS NOT NULL "
+                    "ORDER BY name"))
+            ]
             # Newest first: the recent years are the ones anyone asks about.
             # Missing table (a warehouse synced before this existed) is not
             # worth a 503 — the rest of the panel still works without it.
@@ -231,6 +244,8 @@ def get_filter_options(suit: str | None = None):
         "branches": branches,
         "statuses": statuses,
         "products": products,
+        "law_firms": law_firms,
+        "plaintiffs": plaintiffs,
         "warrant_states": warrant_states,
         "warrant_years": warrant_years,
         # Fixed, ordered by urgency — not data-derived, so empty buckets still show.
@@ -256,6 +271,10 @@ def get_cases(
     case_status: str | None = Query(None),
     # Set by the law-firm drill-down to narrow to one firm.
     law_firm: str | None = Query(None),
+    # The summary's two suggestion boxes, forwarded by its drill-down so the
+    # case list cannot show more than the row that opened it counted.
+    firm: str | None = Query(None),
+    plaintiff: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=1500),
 ):
@@ -264,7 +283,8 @@ def get_cases(
                                   products=products, statuses=statuses,
                                   warrant=warrant, warrant_year=warrant_year,
                                   q=q, case_status=case_status,
-                                  law_firm=law_firm)
+                                  law_firm=law_firm, firm_q=firm,
+                                  plaintiff_q=plaintiff)
     # The filing-date guards belong to BOTH queries below. They used to be a
     # hardcoded tail on the page query only, so COUNT reported more cases than
     # the list could ever show — the last pages came back empty and a
@@ -417,6 +437,10 @@ def get_summary(
     upcoming: str | None = Query(None),
     products: list[str] | None = Query(None),
     statuses: list[str] | None = Query(None),
+    # Suggestion boxes: a substring of the law firm, and of either half of the
+    # plaintiff's identity.
+    firm: str | None = Query(None),
+    plaintiff: str | None = Query(None),
 ):
     """Aggregates across every suit type.
 
@@ -426,7 +450,8 @@ def get_summary(
     individual cases, which is the opposite of what this view is for.
     """
     where, params = build_filters(
-        branch=branch, upcoming=upcoming, products=products, statuses=statuses
+        branch=branch, upcoming=upcoming, products=products, statuses=statuses,
+        firm_q=firm, plaintiff_q=plaintiff,
     )
     # Deselecting every product AND every status leaves no conditions at all,
     # which used to render as "FROM litigation_cases  AND suit_filing_date ..."

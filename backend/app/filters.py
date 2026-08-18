@@ -42,7 +42,8 @@ WARRANT_STATES = [WARRANT_PENDING, WARRANT_EXECUTED]
 
 def build_filters(suit=None, branch=None, upcoming=None, products=None,
                   statuses=None, warrant=None, q=None, case_status=None,
-                  law_firm=None, firm_q=None, warrant_year=None):
+                  law_firm=None, firm_q=None, warrant_year=None,
+                  plaintiff_q=None):
     """Return (list_of_sql_conditions, params_dict)."""
     where, params = [], {}
 
@@ -99,6 +100,15 @@ def build_filters(suit=None, branch=None, upcoming=None, products=None,
     if firm_q:
         where.append(f"{LAW_FIRM_LABEL} ILIKE :firm_q")
         params["firm_q"] = f"%{firm_q}%"
+
+    # One box for the plaintiff, matching either half of the identity — the UI
+    # shows name and CIF together, so searching only one of them would make
+    # half the suggestions unusable once picked.
+    if plaintiff_q:
+        where.append(
+            "(TRIM(plaintiff) ILIKE :plaintiff_q "
+            "OR TRIM(plaintiffcif) ILIKE :plaintiff_q)")
+        params["plaintiff_q"] = f"%{plaintiff_q}%"
 
     # Warrants come in two states, and a case can be in both at once (269 are,
     # in the current data): a warrant executed years ago and another standing

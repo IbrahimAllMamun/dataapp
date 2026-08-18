@@ -55,6 +55,10 @@ export default function CaseListModal({
       qs.set("upcoming", filters.upcoming);
     filters.products.forEach((p) => qs.append("products", p));
     filters.statuses.forEach((s) => qs.append("statuses", s));
+    // The summary's suggestion boxes narrow what it counted, so the drill-down
+    // has to carry them or this list shows more than the row that opened it.
+    if (filters.firm) qs.set("firm", filters.firm);
+    if (filters.plaintiff) qs.set("plaintiff", filters.plaintiff);
 
     fetch(`/api/cases?${qs}`, { signal: ctrl.signal })
       .then(async (res) => {
