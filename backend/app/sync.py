@@ -71,8 +71,8 @@ query_cases = """
       l.CaseID,
       l.Branch,
       CASE 
-        WHEN l.[Present Case Status] 'Judgment & Decreed' THEN 'InActive'
-        ELSE l.LitigationStatus AS LitigationStatus,
+        WHEN l.[Present Case Status] = 'Judgment & Decreed' THEN 'InActive'
+        ELSE l.LitigationStatus END AS LitigationStatus,
       l.[Nature of Suit],
       l.CIF,
       l.[Present Case Status],
@@ -92,7 +92,7 @@ query_cases = """
       l.[Court No],
       CASE 
         WHEN l.[Next Hearing Date] IS NULL THEN l.[Last Hearing Date]
-        ELSE l.[Next Hearing Date] AS [Next Hearing Date],
+        ELSE l.[Next Hearing Date] END AS [Next Hearing Date],
       l.[Last Hearing Date],
       l.[Cheque Number],
       l.Plaintiff,
