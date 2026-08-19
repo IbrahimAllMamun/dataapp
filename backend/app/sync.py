@@ -70,10 +70,13 @@ query_cases = """
       l.ClientName,
       l.CaseID,
       l.Branch,
-      l.LitigationStatus,
+      CASE 
+        WHEN l.[Present Case Status] 'Judgment & Decreed' THEN 'InActive'
+        ELSE l.LitigationStatus AS LitigationStatus,
       l.[Nature of Suit],
       l.CIF,
       l.[Present Case Status],
+      
       COALESCE(
         CASE
             WHEN l.litigationstatus = 'Active'
@@ -87,7 +90,9 @@ query_cases = """
       l.[Suit Value],
       l.[Law Firm],
       l.[Court No],
-      l.[Next Hearing Date],
+      CASE 
+        WHEN l.[Next Hearing Date] IS NULL THEN l.[Last Hearing Date]
+        ELSE l.[Next Hearing Date] AS [Next Hearing Date],
       l.[Last Hearing Date],
       l.[Cheque Number],
       l.Plaintiff,

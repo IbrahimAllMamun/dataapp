@@ -249,8 +249,8 @@ def get_filter_options(suit: str | None = None):
         "warrant_states": warrant_states,
         "warrant_years": warrant_years,
         # Fixed, ordered by urgency — not data-derived, so empty buckets still show.
-        "upcoming": ["No Date", "Not Updated", "Today", "Next 5 Working Days",
-                     "This Month", "Next Month", "Later"],
+        "upcoming": ["No Date", "Not Updated", "Today", "Next Working Day",
+                     "Next 5 Working Days", "This Month", "Next Month", "Later"],
         "defaults": DEFAULTS,
     }
 

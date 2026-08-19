@@ -81,7 +81,7 @@ def next_month_end(d: date) -> date:
     return (first_of_next + pd.offsets.MonthEnd(0)).date()
 
 
-def bucket_upcoming(hearing, today: date, five_bizdays: date,
+def bucket_upcoming(hearing, today: date, next_bizday: date, five_bizdays: date,
                     this_month_end: date, nxt_month_end: date) -> str:
     """Narrowest-first bucketing — the most urgent applicable label wins."""
     if hearing is None or pd.isna(hearing):
@@ -91,6 +91,13 @@ def bucket_upcoming(hearing, today: date, five_bizdays: date,
         return "Not Updated"
     if h == today:
         return "Today"
+    # <=, not ==: when today is Thursday the next working day is Sunday, and a
+    # hearing dated Friday or Saturday falls in between. Testing equality would
+    # push those into the WIDER bucket below, so a Friday hearing would read as
+    # less urgent than a Sunday one. Every rung of this chain is a date
+    # threshold, and the buckets stay ordered by date because of it.
+    if h <= next_bizday:
+        return "Next Working Day"
     if h <= five_bizdays:
         return "Next 5 Working Days"
     if h <= this_month_end:
@@ -108,6 +115,7 @@ def derive_case_columns(cases: pd.DataFrame, holidays: pd.DataFrame,
     holiday_dates = holidays["date"] if "date" in holidays.columns else []
     cal = BizCalendar(holiday_dates)
 
+    nxt = cal.add_bizdays(today, 1)
     five = cal.add_bizdays(today, 5)
     tme = month_end(today)
     nme = next_month_end(today)
@@ -134,7 +142,7 @@ def derive_case_columns(cases: pd.DataFrame, holidays: pd.DataFrame,
     hearing = pd.to_datetime(df["next_hearing_date"], errors="coerce")
 
     df["upcoming"] = [
-        bucket_upcoming(h, today, five, tme, nme) for h in hearing
+        bucket_upcoming(h, today, nxt, five, tme, nme) for h in hearing
     ]
 
     # Date-accurate month membership, independent of the label above. Needed

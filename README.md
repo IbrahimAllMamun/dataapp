@@ -2,7 +2,7 @@
 
 FastAPI + React + PostgreSQL. A scheduled job copies data from the SQL Server
 (IDLC) source into a local Postgres warehouse; the API serves it as filtered
-case lists and aggregates; the frontend renders them as five tabs with a
+case lists and aggregates; the frontend renders them as seven tabs with a
 shared filter panel and drill-downs down to a single case.
 
 ## Architecture
@@ -96,7 +96,7 @@ semi-join against ~12k rows.
 
 ## The app
 
-Five tabs, sharing one filter panel that offers only the controls each tab
+Seven tabs, sharing one filter panel that offers only the controls each tab
 can actually apply. The four suit types collapse into a single chip in the
 nav: click it when inactive to return to the last suit, click it when active
 to choose another.
@@ -116,7 +116,7 @@ with the open one marked. Following one of those updates the card in place.
 ### Filters
 
 Branch, upcoming hearing, product category, litigation status, a client /
-CIF / account search, a law-firm search (Law Firms tab only), and warrant:
+CIF / account search, two suggestion boxes, and warrant:
 
 - **Pending Warrant** — `present_case_status` contains "warrant"
 - **Warrant Executed** — a warrant in the case history that a later,
@@ -125,6 +125,14 @@ CIF / account search, a law-firm search (Law Firms tab only), and warrant:
 
 A case can be in both states at once (an old executed warrant and a standing
 one), so they are separate predicates rather than a partition.
+
+The suggestion boxes (`Suggest.jsx`) are text inputs backed by a list, not
+selects — free text still filters, so a term matching nothing correctly
+returns nothing. **Law Firm** appears on the Summary and Law Firms tabs;
+**Plaintiff** on Summary, where typing either the name or the CIF matches
+(the CIF shows as a badge on each suggestion). Both lists ship whole with
+`/api/filters` and are matched in the browser — there are only tens of each,
+so a request per keystroke would cost more than it saves.
 
 Every aggregate and every list applies the same three filing-date guards
 (`VALID_FILING` in `filters.py`) — present, not after the last hearing, not
@@ -136,7 +144,7 @@ promise more cases than its drill-down can show.
 | Endpoint | Purpose |
 | --- | --- |
 | `GET /api/health` | Liveness |
-| `GET /api/filters` | Options + defaults for the filter panel, scoped to a suit |
+| `GET /api/filters` | Options + defaults for the filter panel, scoped to a suit; includes the law-firm and plaintiff suggestion lists |
 | `GET /api/cases` | The paged case table; takes every filter |
 | `GET /api/case` | One case: fields, hearing history, the client's other cases |
 | `GET /api/reportdate` | The report date currently loaded |
@@ -198,6 +206,12 @@ it, so they cannot drift apart.
 - **Adding the warrant filter needs a sync.** `warrant_executions` is built by
   `sync.py`; on a warehouse loaded before it existed, the filter offers only
   "Pending Warrant" rather than an option that would 503.
+- **The hearing buckets are stored, not computed per request.** `upcoming` is a
+  column written by `derive.py` at sync time, so changing the bucket rules only
+  takes effect on the next sync — until then "Next Working Day" is offered by
+  the filter but no row carries the label. The buckets are also a partition:
+  each case gets the narrowest applicable one, so a hearing tomorrow is "Next
+  Working Day" and *not* also "Next 5 Working Days".
 
 ## Troubleshooting
 
