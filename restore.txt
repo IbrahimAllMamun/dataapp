@@ -1,2 +1,6 @@
-docker compose cp ./DevAnalyticsDB.pgdump db:/tmp/dump.pgdump
+# Create Backup
+docker compose exec -T -e PGPASSWORD=userdev db pg_dump -U devuser -d DevAnalyticsDB -Fc > dump.pgdump
+
+# Restore
+docker compose cp ./dump.pgdump db:/tmp/dump.pgdump
 docker compose exec db pg_restore -U devuser -d DevAnalyticsDB --clean --if-exists /tmp/dump.pgdump
